@@ -1,0 +1,42 @@
+ 5        16        8     0.001     0.02     0.05     0.0    0.25
+ 7        16        8     0.001     0.02     0.05     0.0    0.25
+10        16        8     0.001     0.02     0.05     0.0    0.25
+12        16        8     0.05      0.3      0.5     270.0  320.0
+13        16        8     0.20      0.3      0.5     270.0  320.0
+14        16        8     0.05      0.3      0.5     270.0  320.0
+15        16        8     0.05      0.3      0.5     270.0  320.0
+16        16        8     0.05      0.3      0.5     270.0  320.0
+
+=================================================================
+band  ndetectors  niter   NEdT   Thresh_x  Thresh_y   Tmin   Tmax
+int      int       int    float    float    float    float  float
+=================================================================
+Each line above describes destriping parameters for a given 
+band of VIIRS SDR data. Band can take values 1 <= band <= 16.
+For  optical bands (band <= 11), reflectance is destriped.
+For emissive bands (band >= 12), brightness temperature is detriped. 
+
+Ndetectors should normally be equal to 16, 
+the number of detectors in a VIIRS scan.
+
+niter is number of destriping iterations, niter = 8 is a good
+choice for majority of cases.
+
+NEdT is the parameter of non-linear filter, and has to be
+adjusted for each band. The units are dimensionless 
+for bands 1-11, and Kelvins^2 for bands 12-16.
+
+Thresh_x and Thresh_y are threshold parameters that determine 
+what pixels of data get destriped. They refer to maximum absolute 
+value of gradient that is considered as "smooth" for destriping
+purposes. The units are dimensionless reflectance per pixel 
+for bands 1-11, and Kelvins per pixel for bands 12-16.
+
+Tmin, Tmax are minumum and maximum values of data that limit the
+range of values of pixels that get destriped. This is primarily 
+to exclude from  destriping land, clouds, ice etc. 
+The units are dimensionless (reflectance) for bands 1-11 and 
+Kelvins for bands 12-16.
+=================================================================
+
+
