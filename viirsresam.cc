@@ -13,7 +13,7 @@ char *progname;
 static void
 usage()
 {
-	printf("usage: %s [-r] [-g geofile] viirs_h5_file destriping_parameter_file_viirs.txt\n", progname);
+	printf("usage: %s [-g geofile] viirs_h5_file destriping_parameter_file_viirs.txt\n", progname);
 	printf("	-g geofile\n");
 	printf("		geolocation file name\n");
 	exit(2);
