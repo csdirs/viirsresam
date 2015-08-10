@@ -5,9 +5,9 @@ LDFLAGS=-lhdf5 -lz -lpthread -lm -lopencv_core
 TARG=viirsresam
 OFILES=\
 	allocate_2d.o\
-	readwrite_viirs.o\
-	resample_viirs.o\
-	viirsresam.o\
+	readwrite.o\
+	resample.o\
+	main.o\
 
 HFILES=viirsream.h
 
