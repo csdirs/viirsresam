@@ -6,18 +6,27 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <errno.h>
+#include <math.h>
 #include "viirsresam.h"
 
 #define SGN(A)   ((A) > 0 ? 1 : ((A) < 0 ? -1 : 0 ))
+#define SQ(x)	((x)*(x))
 #define CHECKMAT(M, T)	CV_Assert((M).type() == (T) && (M).isContinuous())
 
 enum {
 	VIIRS_SWATH_SIZE = 16,
 	MAX_TEMP = 350,	// in Kelvin
 	MIN_TEMP = 0,	// in Kelvin
+	DEBUG = true,
 };
 
 using namespace cv;
+
+inline bool
+isinvalid(float x)
+{
+	return x > MAX_TEMP || x < MIN_TEMP;
+}
 
 static void
 eprintf(const char *fmt, ...)
@@ -202,110 +211,6 @@ resample_sort(const Mat &sind, const Mat &img)
 	return Mat();
 }
 
-// Returns the average of 3 pixels.
-static double
-avg3(double a, double b, double c)
-{
-	if(a > MAX_TEMP || b > MAX_TEMP || c > MAX_TEMP
-	        || a < MIN_TEMP || b < MIN_TEMP || c < MIN_TEMP)
-		return b;
-	return (a+b+c)/3.0;
-}
-
-// Returns the average filter of image 'in' with a window of 3x1
-// where sorted order is not the same as the original order.
-// Sind is the sort indices giving the sort order.
-static Mat
-avgfilter3(const Mat &in, const Mat &sind)
-{
-	const int *sindp;
-	const float *ip;
-	Mat out;
-	int i, j, rows, cols;
-	float *op;
-
-	CHECKMAT(in, CV_32FC1);
-	CHECKMAT(sind, CV_32SC1);
-	rows = in.rows;
-	cols = in.cols;
-
-	out.create(rows, cols, CV_32FC1);
-	in.row(0).copyTo(out.row(0));
-	in.row(rows-1).copyTo(out.row(rows-1));
-
-	for(i = 1; i < rows-1; i++) {
-		ip = in.ptr<float>(i);
-		op = out.ptr<float>(i);
-		sindp = sind.ptr<int>(i);
-		for(j = 0; j < cols; j++) {
-			if(sindp[j] != i)
-				op[j] = avg3(ip[j-cols], ip[j], ip[j+cols]);
-			else
-				op[j] = ip[j];
-		}
-	}
-	return out;
-}
-
-// Interpolate the missing values in image simg and returns the result.
-// Slat is the latitude image, and slandmask is the land mask image.
-// All input arguments must already be sorted.
-static Mat
-resample_interp(const Mat &simg, const Mat &slat)
-{
-	int i, j, k, nbuf, *buf;
-	Mat newimg, bufmat;
-	double x, llat, rlat, lval, rval;
-
-	CHECKMAT(simg, CV_32FC1);
-	CHECKMAT(slat, CV_32FC1);
-
-	newimg = simg.clone();
-	bufmat = Mat::zeros(simg.rows, 1, CV_32SC1);
-	buf = (int*)bufmat.data;
-
-	for(j = 0; j < simg.cols; j++) {
-		nbuf = 0;
-		llat = -999;
-		lval = NAN;
-		for(i = 0; i < simg.rows; i++) {
-			// valid pixel
-			if(MIN_TEMP <= simg.at<float>(i, j) && simg.at<float>(i, j) <= MAX_TEMP) {
-				// first pixel is not valid, so extrapolate
-				if(llat == -999) {
-					for(k = 0; k < nbuf; k++) {
-						newimg.at<float>(buf[k],j) = simg.at<float>(i, j);
-					}
-					nbuf = 0;
-				}
-
-				// interpolate pixels in buffer
-				for(k = 0; k < nbuf; k++) {
-					rlat = slat.at<float>(i, j);
-					rval = simg.at<float>(i, j);
-					x = slat.at<float>(buf[k], j);
-					newimg.at<float>(buf[k],j) =
-					    lval + (rval - lval)*(x - llat)/(rlat - llat);
-				}
-
-				llat = slat.at<float>(i, j);
-				lval = simg.at<float>(i, j);
-				nbuf = 0;
-				continue;
-			}
-
-			// no valid pixel
-			buf[nbuf++] = i;
-		}
-		// extrapolate the last pixels
-		if(llat != -999) {
-			for(k = 0; k < nbuf; k++) {
-				newimg.at<float>(buf[k],j) = lval;
-			}
-		}
-	}
-	return newimg;
-}
 
 enum Pole {
 	NORTHPOLE,
@@ -397,6 +302,160 @@ argsortlat(const Mat &lat, int swathsize, Mat &sortidx)
 	}
 }
 
+// Find distance between (lat1, lon1) and (lat2, lon2).
+// Distances are computed using haversine formula 
+// Other versions:
+//	http://en.wikipedia.org/wiki/Great-circle_distance
+//	http://www.movable-type.co.uk/scripts/latlong.html
+//
+double
+geodist(double lat1, double lon1, double lat2, double lon2)
+{
+	const double R = 6371.0;
+	double phi1 = (M_PI * lat1) / 180.0;
+	double phi2 = (M_PI * lat2) / 180.0;
+	double lam1 = (M_PI * lon1) / 180.0;
+	double lam2 = (M_PI * lon2) / 180.0;
+	double delta_phi = phi1 - phi2;
+	double delta_lam = lam1 - lam2;
+	
+	return R*sqrt(SQ(cos((phi1+phi2)/2) * delta_lam) + SQ(delta_phi));
+}
+
+// Approximate from three (possibly invalid) values at lat/lon pairs.
+double
+geoapprox(const float *T, const float *lat, const float *lon, float targlat, float targlon, double res)
+{
+	// none valid
+	if(isinvalid(T[0]) && isinvalid(T[1]) && isinvalid(T[2]))
+		return -999;
+
+	// one valid
+	if(isinvalid(T[0]) && isinvalid(T[1]))
+		return T[2];
+	if(isinvalid(T[0]) && isinvalid(T[2]))
+		return T[1];
+	if(isinvalid(T[1]) && isinvalid(T[2]))
+		return T[0];
+	
+	// at least two valid
+	double sqres = SQ(res);
+	double num = 0;
+	double denom = 0;
+	for(int i = 0; i < 3; i++){
+		if(!isinvalid(T[i])){
+			double d = geodist(targlat, targlon, lat[i], lon[i]);
+			double w = exp(-SQ(d) / sqres);
+			num += T[i] * w;
+			denom += w;
+		}
+	}
+	return num/denom;
+}
+
+// Resample 1D data.
+//
+// sind -- sorting indices
+// slat -- sorted latitude
+// sval -- sorted values
+// dir -- diff direction (-1 or 1)
+// rval -- resampled values (intput & output)
+//
+static void
+resample1d(const int *sind, const float *slat, const float *slon, const float *sval, int n, double res, float *rval)
+{
+	int i;
+	
+	// copy first non-nan value for first row
+	for(i = 0; i < n-1; i += 1){
+		if(!isinvalid(sval[i])){
+			rval[0] = sval[i];
+			break;
+		}
+	}
+	
+	// interpolate the middle values
+	for(i = 1; i < n-1; i += 1){
+		if(sind[i] == i){	// kept order
+			rval[i] = sval[i];
+		}else{	// reordered
+			// TODO: interpolate lon
+			rval[i] = geoapprox(&sval[i-1], &slat[i-1], &slon[i-1], slat[i], slon[i], res);
+		}
+	}
+	
+	// copy last non-nan value to last row
+	for(int k = i; k >= 0; k -= 1){
+		if(!isinvalid(sval[k])){
+			rval[i] = sval[k];
+			break;
+		}
+	}
+}
+
+// Resample a 2D image.
+//
+// ssrc -- image to resample already sorted
+// slat -- sorted latitude
+// sortidx -- lat sorting indices
+// dst -- resampled image (output)
+// 
+static void
+resample2d(const Mat &ssrc, const Mat &slat, const Mat &slon, const Mat &sortidx, Mat &dst)
+{
+	int width, height;
+	Mat col, idx, botidx;
+	Range colrg, toprg, botrg;
+
+	CHECKMAT(ssrc, CV_32FC1);
+	CHECKMAT(slat, CV_32FC1);
+	CHECKMAT(slon, CV_32FC1);
+	CHECKMAT(sortidx, CV_32SC1);
+	CV_Assert(ssrc.data != dst.data);
+
+	width = ssrc.cols;
+	height = ssrc.rows;
+	
+	// compute resolution per column based on the first two rows
+	Mat _res = Mat::zeros(1, width, CV_64FC1);
+	double *res = (double*)_res.data;
+	float *lat1 = (float*)slat.ptr(0);
+	float *lon1 = (float*)slon.ptr(0);
+	float *lat2 = (float*)slat.ptr(1);
+	float *lon2 = (float*)slon.ptr(1);
+	for(int j = 0; j < width; j++){
+		res[j] = geodist(lat1[j], lon1[j], lat2[j], lon2[j]);
+	}
+	if(DEBUG)dumpmat("res.bin", _res);
+
+	dst = Mat::zeros(height, width, CV_32FC1);	// resampled values
+	Mat sindcol = Mat::zeros(height, 1, CV_32SC1);
+	Mat ssrccol = Mat::zeros(height, 1, CV_32FC1);
+	Mat slatcol = Mat::zeros(height, 1, CV_32FC1);
+	Mat sloncol = Mat::zeros(height, 1, CV_32FC1);
+	Mat dstcol = Mat::zeros(height, 1, CV_32FC1);
+	
+	// resample each column
+	for(int j = 0; j < width; j++){
+		// copy columns to contiguous Mats, so we don't have to worry about stride
+		sortidx.col(j).copyTo(sindcol.col(0));
+		slat.col(j).copyTo(slatcol.col(0));
+		slon.col(j).copyTo(sloncol.col(0));
+		ssrc.col(j).copyTo(ssrccol.col(0));
+		
+		resample1d(sindcol.ptr<int>(0),
+			slatcol.ptr<float>(0),
+			sloncol.ptr<float>(0),
+			ssrccol.ptr<float>(0),
+			height,
+			res[j],
+			dstcol.ptr<float>(0));
+		
+		// copy resampled column to destination
+		dstcol.col(0).copyTo(dst.col(j));
+	}
+}
+
 // Resample VIIRS swatch image _img with corresponding
 // latitude image _lat.
 // _img[0..ny][0..nx]  - original image (brightness temperature)
@@ -409,26 +468,36 @@ argsortlat(const Mat &lat, int swathsize, Mat &sortidx)
 void
 resample_viirs(float **_img, float **_lat, float **_lon, int nx, int ny, float min, float max)
 {
-	Mat sind, simg;
+	Mat sind, dst;
 
+	if(DEBUG) printf("resampling debugging is turned on!\n");
+	
 	// Mat wrapper around external buffer.
 	// Caller of this function still reponsible for freeing the buffers.
 	Mat img(ny, nx, CV_32FC1, &_img[0][0]);
 	Mat lat(ny, nx, CV_32FC1, &_lat[0][0]);
-	if(false)dumpmat("before.bin", img);
+	Mat lon(ny, nx, CV_32FC1, &_lon[0][0]);
+	if(DEBUG)dumpmat("before.bin", img);
+	if(DEBUG)dumpmat("lat.bin", lat);
 
 	argsortlat(lat, VIIRS_SWATH_SIZE, sind);
-	simg = resample_sort(sind, img);
-	if(false)dumpmat("simg1.bin", simg);
-	simg = avgfilter3(simg, sind);
-	if(false)dumpmat("simg2.bin", simg);
-	lat = resample_sort(sind, lat);
-	simg = resample_interp(simg, lat);
-	if(false)dumpmat("simg3.bin", simg);
-	simg = resample_unsort(sind, simg);
-	if(false)dumpmat("simg4.bin", simg);
+	Mat slat = resample_sort(sind, lat);
+	Mat slon = resample_sort(sind, lon);
+	Mat simg = resample_sort(sind, img);
+	if(DEBUG)dumpmat("sind.bin", sind);
+	if(DEBUG)dumpmat("simg.bin", simg);
+	if(DEBUG)dumpmat("slat.bin", slat);
+	
+	resample2d(simg, slat, slon, sind, dst);
+	if(DEBUG)dumpmat("after.bin", dst);
+	
+	//simg = resample_interp(simg, lat);
+	//if(DEBUG)dumpmat("simg3.bin", simg);
+	//simg = resample_unsort(sind, simg);
+	//if(DEBUG)dumpmat("simg4.bin", simg);
 
-	CV_Assert(simg.size() == img.size() && simg.type() == img.type());
-	simg.copyTo(img);
-	if(false)dumpfloat("final.bin", &_img[0][0], nx*ny);
+	//CV_Assert(simg.size() == img.size() && simg.type() == img.type());
+	//simg.copyTo(img);
+	//if(DEBUG)dumpfloat("final.bin", &_img[0][0], nx*ny);
+	if(DEBUG)exit(3);
 }
