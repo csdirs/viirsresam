@@ -15,6 +15,7 @@
 
 enum {
 	VIIRS_SWATH_SIZE = 16,
+	NDETECTORS = 16,
 	MAX_TEMP = 350,	// in Kelvin
 	MIN_TEMP = 0,	// in Kelvin
 	DEBUG = true,
@@ -353,6 +354,84 @@ geoapprox(const float *T, const float *lat, const float *lon, float targlat, flo
 	return num/denom;
 }
 
+// Linear interpolation at x between points (x0, y0) and (x1, y1).
+inline double
+linearinterp(double x0, double y0, double x1, double y1, double x)
+{
+	double lam = (x - x0)/(x1 - x0);
+	return (1-lam)*y0 + lam*y1;
+}
+
+// Interpolate longitude based on latitude sorting order.
+// This makes the longitude monotonic.
+//
+// sind -- latitude sorting indices
+// lon -- unsorted longitude
+// slon -- sorted longitude
+// n -- number of elements
+// dst -- destination of interpolation (output)
+//
+void
+interplon(const int *sind, const float *lon, const float *slon, int n, float *dst)
+{
+	vector<int> buf;
+	int i;
+	double prevkeep, prevlon;
+	
+	// extrapolate the reordered points before the first "kept order" point
+	for(i = 0; i < n; i++){
+		if(sind[i] == i){
+			break;
+		}
+		buf.push_back(i);
+	}
+	for(int j = 0; j < (int)buf.size(); j++){
+		dst[buf[j]] = slon[i];
+	}
+	buf.clear();
+	prevkeep = i;
+	prevlon = slon[i];
+	
+	// interpolate reordered points
+	for(; i < n; i++){
+		// sneak in middle of swath (between middle two detectors)
+		if(i%NDETECTORS == NDETECTORS/2){
+			double curkeep = i-0.5;
+			double curlon = ((double)lon[i]+lon[i-1])/2.0;
+			
+			// interpolate at points in the buffer and clear the buffer
+			for(int j = 0; j < (int)buf.size(); j++){
+				int k = buf[j];
+				dst[k] = linearinterp(prevkeep, prevlon, curkeep, curlon, k);
+			}
+			buf.clear();
+			
+			prevkeep = curkeep;
+			prevlon = curlon;
+		}
+		
+		if(sind[i] == i){	// kept order
+			// interpolate at points in the buffer and clear the buffer
+			for(int j = 0; j < (int)buf.size(); j++){
+				int k = buf[j];
+				dst[k] = linearinterp(prevkeep, prevlon, i, slon[i], k);
+			}
+			buf.clear();
+			
+			prevkeep = i;
+			prevlon = slon[i];
+			dst[i] = slon[i];
+		}else{	// reordered
+			buf.push_back(i);
+		}
+	}
+	
+	// extrapolate the reordered points after the last "kept order" point
+	for(int j = 0; j < (int)buf.size(); j++){
+		dst[buf[j]] = prevlon;
+	}
+}
+
 // Resample 1D data.
 //
 // sind -- sorting indices
@@ -401,7 +480,8 @@ resample1d(const int *sind, const float *slat, const float *slon, const float *s
 // dst -- resampled image (output)
 // 
 static void
-resample2d(const Mat &ssrc, const Mat &slat, const Mat &slon, const Mat &sortidx, Mat &dst)
+resample2d(const Mat &ssrc, const Mat &slat, const Mat &slon, const Mat &sortidx,
+	const Mat &lon, Mat &dst)
 {
 	int width, height;
 	Mat col, idx, botidx;
@@ -454,6 +534,26 @@ resample2d(const Mat &ssrc, const Mat &slat, const Mat &slon, const Mat &sortidx
 		// copy resampled column to destination
 		dstcol.col(0).copyTo(dst.col(j));
 	}
+
+	Mat ilon = Mat::zeros(height, width, CV_32FC1);
+	Mat loncol = Mat::zeros(height, 1, CV_32FC1);
+	Mat iloncol = Mat::zeros(height, 1, CV_32FC1);
+	
+	for(int j = 0; j < width; j++){
+		sortidx.col(j).copyTo(sindcol.col(0));
+		slon.col(j).copyTo(sloncol.col(0));
+		lon.col(j).copyTo(loncol.col(0));
+		ilon.col(j).copyTo(iloncol.col(0));
+		
+		interplon(sindcol.ptr<int>(0),
+			loncol.ptr<float>(0),
+			sloncol.ptr<float>(0),
+			height,
+			iloncol.ptr<float>(0));
+		
+		iloncol.col(0).copyTo(ilon.col(j));
+	}
+	if(DEBUG)dumpmat("ilon.bin", ilon);
 }
 
 // Resample VIIRS swatch image _img with corresponding
@@ -479,6 +579,7 @@ resample_viirs(float **_img, float **_lat, float **_lon, int nx, int ny, float m
 	Mat lon(ny, nx, CV_32FC1, &_lon[0][0]);
 	if(DEBUG)dumpmat("before.bin", img);
 	if(DEBUG)dumpmat("lat.bin", lat);
+	if(DEBUG)dumpmat("lon.bin", lon);
 
 	argsortlat(lat, VIIRS_SWATH_SIZE, sind);
 	Mat slat = resample_sort(sind, lat);
@@ -487,8 +588,9 @@ resample_viirs(float **_img, float **_lat, float **_lon, int nx, int ny, float m
 	if(DEBUG)dumpmat("sind.bin", sind);
 	if(DEBUG)dumpmat("simg.bin", simg);
 	if(DEBUG)dumpmat("slat.bin", slat);
+	if(DEBUG)dumpmat("slon.bin", slon);
 	
-	resample2d(simg, slat, slon, sind, dst);
+	resample2d(simg, slat, slon, sind, lon, dst);
 	if(DEBUG)dumpmat("after.bin", dst);
 	
 	//simg = resample_interp(simg, lat);
