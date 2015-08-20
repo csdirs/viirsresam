@@ -324,6 +324,14 @@ geodist(double lat1, double lon1, double lat2, double lon2)
 }
 
 // Approximate from three (possibly invalid) values at lat/lon pairs.
+//
+// T -- 3 SST values
+// lat -- 3 latitudes
+// lon -- 3 longitudes
+// targlat -- target latitude
+// targlon -- target longitude
+// res -- spatial resolution
+//
 double
 geoapprox(const float *T, const float *lat, const float *lon, float targlat, float targlon, double res)
 {
@@ -366,17 +374,16 @@ linearinterp(double x0, double y0, double x1, double y1, double x)
 // This makes the longitude monotonic.
 //
 // sind -- latitude sorting indices
-// lon -- unsorted longitude
 // slon -- sorted longitude
+// lon -- unsorted longitude
 // n -- number of elements
 // dst -- destination of interpolation (output)
 //
 void
-interplon(const int *sind, const float *lon, const float *slon, int n, float *dst)
+interplon(const int *sind, const float *slon, const float *lon, int n, float *dst)
 {
 	vector<int> buf;
 	int i;
-	double prevkeep, prevlon;
 	
 	// extrapolate the reordered points before the first "kept order" point
 	for(i = 0; i < n; i++){
@@ -389,8 +396,8 @@ interplon(const int *sind, const float *lon, const float *slon, int n, float *ds
 		dst[buf[j]] = slon[i];
 	}
 	buf.clear();
-	prevkeep = i;
-	prevlon = slon[i];
+	double prevkeep = i;
+	double prevlon = slon[i];
 	
 	// interpolate reordered points
 	for(; i < n; i++){
@@ -435,13 +442,17 @@ interplon(const int *sind, const float *lon, const float *slon, int n, float *ds
 // Resample 1D data.
 //
 // sind -- sorting indices
-// slat -- sorted latitude
 // sval -- sorted values
-// dir -- diff direction (-1 or 1)
-// rval -- resampled values (intput & output)
+// slat -- sorted latitude
+// slon -- sorted longitude
+// ilon -- interpolated longitude
+// n -- number of elements
+// res -- spatial resolution
+// rval -- resampled values (output)
 //
 static void
-resample1d(const int *sind, const float *slat, const float *slon, const float *sval, int n, double res, float *rval)
+resample1d(const int *sind, const float *sval, const float *slat, const float *slon,
+	const float *ilon, int n, double res, float *rval)
 {
 	int i;
 	
@@ -458,8 +469,7 @@ resample1d(const int *sind, const float *slat, const float *slon, const float *s
 		if(sind[i] == i){	// kept order
 			rval[i] = sval[i];
 		}else{	// reordered
-			// TODO: interpolate lon
-			rval[i] = geoapprox(&sval[i-1], &slat[i-1], &slon[i-1], slat[i], slon[i], res);
+			rval[i] = geoapprox(&sval[i-1], &slat[i-1], &slon[i-1], slat[i], ilon[i], res);
 		}
 	}
 	
@@ -474,18 +484,18 @@ resample1d(const int *sind, const float *slat, const float *slon, const float *s
 
 // Resample a 2D image.
 //
+// sortidx -- latitude sorting indices
 // ssrc -- image to resample already sorted
 // slat -- sorted latitude
-// sortidx -- lat sorting indices
+// slon -- sorted longitude
+// lon -- unsorted longitude
 // dst -- resampled image (output)
 // 
 static void
-resample2d(const Mat &ssrc, const Mat &slat, const Mat &slon, const Mat &sortidx,
+resample2d(const Mat &sortidx, const Mat &ssrc, const Mat &slat, const Mat &slon,
 	const Mat &lon, Mat &dst)
 {
-	int width, height;
-	Mat col, idx, botidx;
-	Range colrg, toprg, botrg;
+	Mat ilon;
 
 	CHECKMAT(ssrc, CV_32FC1);
 	CHECKMAT(slat, CV_32FC1);
@@ -493,8 +503,8 @@ resample2d(const Mat &ssrc, const Mat &slat, const Mat &slon, const Mat &sortidx
 	CHECKMAT(sortidx, CV_32SC1);
 	CV_Assert(ssrc.data != dst.data);
 
-	width = ssrc.cols;
-	height = ssrc.rows;
+	int width = ssrc.cols;
+	int height = ssrc.rows;
 	
 	// compute resolution per column based on the first two rows
 	Mat _res = Mat::zeros(1, width, CV_64FC1);
@@ -508,50 +518,44 @@ resample2d(const Mat &ssrc, const Mat &slat, const Mat &slon, const Mat &sortidx
 	}
 	if(DEBUG)dumpmat("res.bin", _res);
 
-	dst = Mat::zeros(height, width, CV_32FC1);	// resampled values
+	// allocate output and temporary bufferes for each column
+	dst = Mat::zeros(height, width, CV_32FC1);
+	if(DEBUG) ilon = Mat::zeros(height, width, CV_32FC1);
 	Mat sindcol = Mat::zeros(height, 1, CV_32SC1);
 	Mat ssrccol = Mat::zeros(height, 1, CV_32FC1);
 	Mat slatcol = Mat::zeros(height, 1, CV_32FC1);
 	Mat sloncol = Mat::zeros(height, 1, CV_32FC1);
+	Mat loncol = Mat::zeros(height, 1, CV_32FC1);
 	Mat dstcol = Mat::zeros(height, 1, CV_32FC1);
+	Mat iloncol = Mat::zeros(height, 1, CV_32FC1);
 	
 	// resample each column
 	for(int j = 0; j < width; j++){
 		// copy columns to contiguous Mats, so we don't have to worry about stride
 		sortidx.col(j).copyTo(sindcol.col(0));
+		ssrc.col(j).copyTo(ssrccol.col(0));
 		slat.col(j).copyTo(slatcol.col(0));
 		slon.col(j).copyTo(sloncol.col(0));
-		ssrc.col(j).copyTo(ssrccol.col(0));
+		lon.col(j).copyTo(loncol.col(0));
 		
+		// interpolate longitude to make it monotonic
+		interplon(sindcol.ptr<int>(0),
+			sloncol.ptr<float>(0),
+			loncol.ptr<float>(0),
+			height,
+			iloncol.ptr<float>(0));
+		if(DEBUG) iloncol.col(0).copyTo(ilon.col(j));
+		
+		// resample and copy column to output
 		resample1d(sindcol.ptr<int>(0),
+			ssrccol.ptr<float>(0),
 			slatcol.ptr<float>(0),
 			sloncol.ptr<float>(0),
-			ssrccol.ptr<float>(0),
+			iloncol.ptr<float>(0),
 			height,
 			res[j],
 			dstcol.ptr<float>(0));
-		
-		// copy resampled column to destination
 		dstcol.col(0).copyTo(dst.col(j));
-	}
-
-	Mat ilon = Mat::zeros(height, width, CV_32FC1);
-	Mat loncol = Mat::zeros(height, 1, CV_32FC1);
-	Mat iloncol = Mat::zeros(height, 1, CV_32FC1);
-	
-	for(int j = 0; j < width; j++){
-		sortidx.col(j).copyTo(sindcol.col(0));
-		slon.col(j).copyTo(sloncol.col(0));
-		lon.col(j).copyTo(loncol.col(0));
-		ilon.col(j).copyTo(iloncol.col(0));
-		
-		interplon(sindcol.ptr<int>(0),
-			loncol.ptr<float>(0),
-			sloncol.ptr<float>(0),
-			height,
-			iloncol.ptr<float>(0));
-		
-		iloncol.col(0).copyTo(ilon.col(j));
 	}
 	if(DEBUG)dumpmat("ilon.bin", ilon);
 }
@@ -590,7 +594,7 @@ resample_viirs(float **_img, float **_lat, float **_lon, int nx, int ny, float m
 	if(DEBUG)dumpmat("slat.bin", slat);
 	if(DEBUG)dumpmat("slon.bin", slon);
 	
-	resample2d(simg, slat, slon, sind, lon, dst);
+	resample2d(sind, simg, slat, slon, lon, dst);
 	if(DEBUG)dumpmat("after.bin", dst);
 	
 	//simg = resample_interp(simg, lat);
