@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <math.h>
 #include "viirsresam.h"
+#include "sort.h"
 
 #define SGN(A)   ((A) > 0 ? 1 : ((A) < 0 ? -1 : 0 ))
 #define SQ(x)	((x)*(x))
@@ -15,6 +16,7 @@
 
 enum {
 	VIIRS_SWATH_SIZE = 16,
+	VIIRS_WIDTH = 3200,
 	NDETECTORS = 16,
 	MAX_TEMP = 350,	// in Kelvin
 	MIN_TEMP = 0,	// in Kelvin
@@ -116,6 +118,49 @@ dumpfloat(const char *filename, float *buf, int nbuf)
 	fclose(f);
 }
 
+// Generate a image of latitude sorting indices.
+//
+// sind -- sorting indices (output)
+// height -- height of the output
+//
+void
+getsortingind(Mat &sind, int height)
+{
+	sind = Mat::zeros(height, VIIRS_WIDTH, CV_32SC1);
+	
+	int x = 0;
+	for(int i = 0; i < (int)nelem(SORT_BREAK_POINTS); i++){
+		int xe = SORT_BREAK_POINTS[i];
+		for(; x < xe; x++){
+			for(int y = 0; y < NDETECTORS; y++){
+				sind.at<int>(y, x) = y + SORT_FIRST[y][i];
+			}
+			for(int y = NDETECTORS; y < height-NDETECTORS; y++){
+				sind.at<int>(y, x) = y + SORT_MID[y%NDETECTORS][i];
+			}
+			for(int y = height-NDETECTORS; y < height; y++){
+				sind.at<int>(y, x) = y + SORT_LAST[y%NDETECTORS][i];
+			}
+		}
+	}
+	
+	x = VIIRS_WIDTH-1;
+	for(int i = 0; i < (int)nelem(SORT_BREAK_POINTS); i++){
+		int xe = VIIRS_WIDTH - SORT_BREAK_POINTS[i];
+		for(; x >= xe; x--){
+			for(int y = 0; y < NDETECTORS; y++){
+				sind.at<int>(y, x) = y + SORT_FIRST[y][i];
+			}
+			for(int y = NDETECTORS; y < height-NDETECTORS; y++){
+				sind.at<int>(y, x) = y + SORT_MID[y%NDETECTORS][i];
+			}
+			for(int y = height-NDETECTORS; y < height; y++){
+				sind.at<int>(y, x) = y + SORT_LAST[y%NDETECTORS][i];
+			}
+		}
+	}
+}
+
 template <class T>
 static Mat
 resample_unsort_(const Mat &sind, const Mat &img)
@@ -210,97 +255,6 @@ resample_sort(const Mat &sind, const Mat &img)
 	}
 	// not reached
 	return Mat();
-}
-
-
-enum Pole {
-	NORTHPOLE,
-	SOUTHPOLE,
-	NOPOLE,
-};
-typedef enum Pole Pole;
-
-// Argsort latitude image 'lat' with given swath size.
-// Image of sort indices are return in 'sortidx'.
-static void
-argsortlat(const Mat &lat, int swathsize, Mat &sortidx)
-{
-	int i, j, off, width, height, dir, d, split;
-	Pole pole;
-	Mat col, idx, botidx;
-	Range colrg, toprg, botrg;
-
-	CHECKMAT(lat, CV_32FC1);
-	CV_Assert(swathsize >= 2);
-	CV_Assert(lat.data != sortidx.data);
-
-	width = lat.cols;
-	height = lat.rows;
-	sortidx.create(height, width, CV_32SC1);
-
-	// For a column in latitude image, look at every 'swathsize' pixels
-	// starting from 'off'. If they increases and then decreases, or
-	// decreases and then increases, we're at the polar region.
-	off = swathsize/2;
-
-	pole = NOPOLE;
-
-	for(j = 0; j < width; j++) {
-		col = lat.col(j);
-
-		// find initial direction -- increase, decrease or no change
-		dir = 0;
-		for(i = off+swathsize; i < height; i += swathsize) {
-			dir = SGN(col.at<float>(i) - col.at<float>(i-swathsize));
-			if(dir != 0)
-				break;
-		}
-
-		// find change in direction if there is one
-		for(; i < height; i += swathsize) {
-			d = SGN(col.at<float>(i) - col.at<float>(i-swathsize));
-			if(dir == 1 && d == -1) {
-				CV_Assert(pole == NOPOLE || pole == NORTHPOLE);
-				pole = NORTHPOLE;
-				break;
-			}
-			if(dir == -1 && d == 1) {
-				CV_Assert(pole == NOPOLE || pole == SOUTHPOLE);
-				pole = SOUTHPOLE;
-				break;
-			}
-		}
-
-		if(i >= height) {
-			pole = NOPOLE;
-			if(dir >= 0)
-				sortIdx(col, sortidx.col(j), CV_SORT_EVERY_COLUMN + CV_SORT_ASCENDING);
-			else
-				sortIdx(col, sortidx.col(j), CV_SORT_EVERY_COLUMN + CV_SORT_DESCENDING);
-			continue;
-		}
-
-		split = i-swathsize;	// split before change in direction
-		colrg = Range(j, j+1);
-		toprg = Range(0, split);
-		botrg = Range(split, height);
-
-		if(pole == NORTHPOLE) {
-			botidx = sortidx(botrg, colrg);
-			sortIdx(col.rowRange(toprg), sortidx(toprg, colrg),
-			        CV_SORT_EVERY_COLUMN + CV_SORT_ASCENDING);
-			sortIdx(col.rowRange(botrg), botidx,
-			        CV_SORT_EVERY_COLUMN + CV_SORT_DESCENDING);
-			botidx += split;
-		} else {	// pole == SOUTHPOLE
-			botidx = sortidx(botrg, colrg);
-			sortIdx(col.rowRange(toprg), sortidx(toprg, colrg),
-			        CV_SORT_EVERY_COLUMN + CV_SORT_DESCENDING);
-			sortIdx(col.rowRange(botrg), botidx,
-			        CV_SORT_EVERY_COLUMN + CV_SORT_ASCENDING);
-			botidx += split;
-		}
-	}
 }
 
 // Find distance between (lat1, lon1) and (lat2, lon2).
@@ -575,6 +529,12 @@ resample_viirs(float **_img, float **_lat, float **_lon, int nx, int ny, float m
 	Mat sind, dst;
 
 	if(DEBUG) printf("resampling debugging is turned on!\n");
+	if(ny%NDETECTORS != 0){
+		eprintf("invalid height %d (not multiple of %d)\n", ny, NDETECTORS);
+	}
+	if(nx != VIIRS_WIDTH){
+		eprintf("invalid width %d; want %d", nx, VIIRS_WIDTH);
+	}
 	
 	// Mat wrapper around external buffer.
 	// Caller of this function still reponsible for freeing the buffers.
@@ -585,7 +545,7 @@ resample_viirs(float **_img, float **_lat, float **_lon, int nx, int ny, float m
 	if(DEBUG)dumpmat("lat.bin", lat);
 	if(DEBUG)dumpmat("lon.bin", lon);
 
-	argsortlat(lat, VIIRS_SWATH_SIZE, sind);
+	getsortingind(sind, ny);
 	Mat slat = resample_sort(sind, lat);
 	Mat slon = resample_sort(sind, lon);
 	Mat simg = resample_sort(sind, img);

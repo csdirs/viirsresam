@@ -9,7 +9,9 @@ OFILES=\
 	resample_geo.o\
 	main.o\
 
-HFILES=viirsream.h
+HFILES=\
+	viirsream.h\
+	sort.h\
 
 all: $(TARG)
 
