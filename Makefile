@@ -6,7 +6,7 @@ TARG=viirsresam
 OFILES=\
 	allocate_2d.o\
 	readwrite.o\
-	resample_geo.o\
+	resample.o\
 	main.o\
 
 HFILES=\
