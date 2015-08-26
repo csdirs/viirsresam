@@ -395,29 +395,37 @@ resample1d(const int *sind, const float *sval, const float *slat, const float *s
 {
 	int i;
 	
-	// copy first non-nan value for first row
-	for(i = 0; i < n-1; i += 1){
-		if(!isinvalid(sval[i])){
-			rval[0] = sval[i];
-			break;
-		}
-	}
-	
-	// interpolate the middle values
-	for(i = 1; i < n-1; i += 1){
+	// Interpolate the middle values.
+	// Set first and last values to an invalid value for now
+	// because interpolation requires 3 consecutive values.
+	rval[0] = INVALID_TEMP;
+	for(i = 1; i < n-1; i++){
 		if(sind[i] == i){	// kept order
 			rval[i] = sval[i];
 		}else{	// reordered
 			rval[i] = geoapprox(&sval[i-1], &slat[i-1], &slon[i-1], slat[i], ilon[i], res);
 		}
 	}
+	rval[n-1] = INVALID_TEMP;
 	
-	// copy last non-nan value to last row
-	for(int k = i; k >= 0; k -= 1){
-		if(!isinvalid(sval[k])){
-			rval[i] = sval[k];
+	// extrapolate beginning values that are invalid
+	for(i = 0; i < n; i++){
+		if(!isinvalid(rval[i])){
 			break;
 		}
+	}
+	for(int k = 0; k < i; k++){
+		rval[k] = rval[i];
+	}
+	
+	// extrapolate ending values that are invalid
+	for(i = n-1; i >= 0; i--){
+		if(!isinvalid(rval[i])){
+			break;
+		}
+	}
+	for(int k = i+1; k < n; k++){
+		rval[k] = rval[i];
 	}
 }
 
