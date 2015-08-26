@@ -10,7 +10,7 @@ OFILES=\
 	main.o\
 
 HFILES=\
-	viirsream.h\
+	viirsresam.h\
 	sort.h\
 
 all: $(TARG)
