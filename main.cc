@@ -288,7 +288,13 @@ run(char *h5file, char *paramfile, char *geofile)
 	free(bufferf3);
 
 	// resampling of image on sorted lon, lat grid
-	resample_viirs(img_in, lat, lon, sx, sy, Qmin_arr[is], Qmax_arr[is]);
+	if(is != 13){
+		resample_viirs(img_in, lat, lon, sx, sy, Qmin_arr[is], Qmax_arr[is],
+			scale*DELETION_ZONE_INT+offset);
+	}else{
+		resample_viirs(img_in, lat, lon, sx, sy, Qmin_arr[is], Qmax_arr[is],
+			DELETION_ZONE_FLOAT);
+	}
 
 
 	// Scale resampled data back to integers if band != M13

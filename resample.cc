@@ -2,28 +2,13 @@
 // Resampling of image based on latitude
 //
 
-#include <opencv2/opencv.hpp>
-#include <stdio.h>
-#include <stdarg.h>
-#include <errno.h>
-#include <math.h>
 #include "viirsresam.h"
 #include "sort.h"
 
-#define SGN(A)   ((A) > 0 ? 1 : ((A) < 0 ? -1 : 0 ))
-#define SQ(x)	((x)*(x))
-#define CHECKMAT(M, T)	CV_Assert((M).type() == (T) && (M).isContinuous())
-
-enum {
-	VIIRS_SWATH_SIZE = 16,
-	VIIRS_WIDTH = 3200,
-	NDETECTORS = 16,
-	MAX_TEMP = 350,	// in Kelvin
-	MIN_TEMP = 0,	// in Kelvin
-	DEBUG = true,
-};
-
-using namespace cv;
+// Pixels in deletion zone are given this value.
+// It's -999.0 for band 13, and scaled value of integer 65533 for other bands.
+// Set during entery point of resampling, in resample_viirs.
+float DELETION_ZONE_VALUE = -999.0;
 
 inline bool
 isinvalid(float x)
@@ -291,7 +276,7 @@ geoapprox(const float *T, const float *lat, const float *lon, float targlat, flo
 {
 	// none valid
 	if(isinvalid(T[0]) && isinvalid(T[1]) && isinvalid(T[2]))
-		return -999;
+		return DELETION_ZONE_VALUE;
 
 	// one valid
 	if(isinvalid(T[0]) && isinvalid(T[1]))
@@ -524,11 +509,15 @@ resample2d(const Mat &sortidx, const Mat &ssrc, const Mat &slat, const Mat &slon
 //
 // TODO: use min, max arguments
 void
-resample_viirs(float **_img, float **_lat, float **_lon, int nx, int ny, float min, float max)
+resample_viirs(float **_img, float **_lat, float **_lon, int nx, int ny, float min, float max, float delval)
 {
 	Mat sind, dst;
 
 	if(DEBUG) printf("resampling debugging is turned on!\n");
+	
+	DELETION_ZONE_VALUE = delval;
+	if(DEBUG) printf("deletion zone value is %f\n", DELETION_ZONE_VALUE);
+
 	if(ny%NDETECTORS != 0){
 		eprintf("invalid height %d (not multiple of %d)\n", ny, NDETECTORS);
 	}
@@ -557,13 +546,10 @@ resample_viirs(float **_img, float **_lat, float **_lon, int nx, int ny, float m
 	resample2d(sind, simg, slat, slon, lon, dst);
 	if(DEBUG)dumpmat("after.bin", dst);
 	
-	//simg = resample_interp(simg, lat);
-	//if(DEBUG)dumpmat("simg3.bin", simg);
-	//simg = resample_unsort(sind, simg);
-	//if(DEBUG)dumpmat("simg4.bin", simg);
-
-	//CV_Assert(simg.size() == img.size() && simg.type() == img.type());
-	//simg.copyTo(img);
-	//if(DEBUG)dumpfloat("final.bin", &_img[0][0], nx*ny);
+	dst = resample_unsort(sind, dst);
+	
+	CV_Assert(dst.size() == img.size() && dst.type() == img.type());
+	dst.copyTo(img);
+	if(DEBUG)dumpfloat("final.bin", &_img[0][0], nx*ny);
 	if(DEBUG)exit(3);
 }
