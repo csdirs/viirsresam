@@ -507,17 +507,18 @@ resample2d(const Mat &sortidx, const Mat &ssrc, const Mat &slat, const Mat &slon
 	if(DEBUG)dumpmat("ilon.bin", ilon);
 }
 
-// Resample VIIRS swatch image _img with corresponding
-// latitude image _lat.
-// _img[0..ny][0..nx]  - original image (brightness temperature)
-// _lat[0..ny][0..nx]  - original latitude
-// _lon[0..ny][0..nx]  - original longitude
-// nx = width of image (should be 3200 for VIIRS)
-// ny = height of image ( 5408 or 5392 for ~10 min VIIRS granule)
+// Resample a VIIRS swath image.
 //
-// TODO: use min, max arguments
+// _img -- swath brightness temperature image to be resampled (input & output)
+// _lat -- corresponding latitude image
+// _lon -- corresponding longitude image
+// nx -- width of image (should be 3200 for VIIRS)
+// ny -- height of image (5408 or 5392 for ~10 min VIIRS granule)
+// delval -- value used for deletion zone in _img
+// sortoutput -- indicates if output should be in latitude sorted order
+//
 void
-resample_viirs(float **_img, float **_lat, float **_lon, int nx, int ny, float min, float max, float delval)
+resample_viirs(float **_img, float **_lat, float **_lon, int nx, int ny, float delval, bool sortoutput)
 {
 	Mat sind, dst;
 
@@ -554,7 +555,9 @@ resample_viirs(float **_img, float **_lat, float **_lon, int nx, int ny, float m
 	resample2d(sind, simg, slat, slon, lon, dst);
 	if(DEBUG)dumpmat("after.bin", dst);
 	
-	dst = resample_unsort(sind, dst);
+	if(!sortoutput){
+		dst = resample_unsort(sind, dst);
+	}
 	
 	CV_Assert(dst.size() == img.size() && dst.type() == img.type());
 	dst.copyTo(img);

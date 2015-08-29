@@ -6,16 +6,14 @@
 #include <math.h>
 #include "viirsresam.h"
 
-static int run(char *h5file, char *paramfile, char *geofile);
+static int run(char *h5file, char *geofile, bool sortoutput);
 
 char *progname;
 
 static void
 usage()
 {
-	printf("usage: %s [-g geofile] viirs_h5_file destriping_parameter_file_viirs.txt\n", progname);
-	printf("	-g geofile\n");
-	printf("		geolocation file name\n");
+	printf("usage: %s [-s] geofile viirs_h5_file\n", progname);
 	exit(2);
 }
 
@@ -27,12 +25,12 @@ usage()
 int
 main(int argc, char** argv)
 {
-	char *flag, *gfile, geofile[1024], *h5file, *paramfile;
+	char *flag;
 
 
 	// parse arguments
 	GETARG(progname);
-	gfile = NULL;
+	bool sortoutput = false;
 	while(argc > 0 && strlen(argv[0]) == 2 && argv[0][0] == '-') {
 		GETARG(flag);
 
@@ -42,53 +40,28 @@ main(int argc, char** argv)
 			break;
 		case '-':
 			goto argdone;
-		case 'g':
-			if(argc < 1)
-				usage();
-			GETARG(gfile)
+		case 's':
+			sortoutput = true;
 			break;
 		}
 	}
 argdone:
 	if(argc != 2)
 		usage();
-	h5file = argv[0];
-	paramfile = argv[1];
+	char *geofile = argv[0];
+	char *h5file = argv[1];
 
 	// echo command line
-	printf("viirsresam %s%s %s %s\n",
-	       gfile ? "-g " : "",
-	       gfile ? gfile : "",
-	       h5file, paramfile);
-
-	// generate the name of the corresponding geofile
-	if(gfile) {
-		sprintf(geofile, "%s", gfile);
-	} else {
-		// start with provided SVM file name
-		sprintf(geofile, "%s", h5file);
-		char *p = strrchr(geofile, '/');
-		if(p == NULL) {
-			p = geofile;
-		} else {
-			p++;
-		}
-		// construct geolocation file name  - replace "SVMXY" with "GMODO"
-		if(strlen(p) > 10) {
-			*p++ = 'G';
-			*p++ = 'M';
-			*p++ = 'O';
-			*p++ = 'D';
-			*p++ = 'O';
-		}
-	}
+	printf("viirsresam %s%s %s\n",
+		sortoutput ? "-s " : "",
+		geofile, h5file);
 	printf("Corresponding geofile = %s\n", geofile);
 
-	return run(h5file, paramfile, geofile);
+	return run(h5file, geofile, sortoutput);
 }
 
 static int
-run(char *h5file, char *paramfile, char *geofile)
+run(char *h5file, char *geofile, bool sortoutput)
 {
 	unsigned short *buffer1  = NULL;
 	float          *bufferf1 = NULL;
@@ -99,47 +72,7 @@ run(char *h5file, char *paramfile, char *geofile)
 	float scale1, offset1;
 	int ix, sx, sy;
 	double scale, offset;
-
-	int Ndet_arr[40], Niter_arr[40], isband[40];
-	float Qmin_arr[40], Qmax_arr[40], Tx_arr[40], Ty_arr[40], NEdQ_arr[40];
-
 	float ** img_in, **lat, **lon;
-
-	//////////////////////////////////////////////////////////////////////////////////////////////////
-	// open parameter file
-	//////////////////////////////////////////////////////////////////////////////////////////////////
-	FILE *fp = fopen(paramfile,"r");
-	if(fp==NULL) {
-		printf("ERROR: Cannot open param. file\n");
-		return -8;
-	}
-
-	// read parameters
-	for(i=0; i<16; i++) {
-		isband[i] = 0;    // initially set all band parameters as "absent"
-	}
-	for(i=0; i<16; i++) {                 // read at most 16 lines of parameters
-		j = fscanf(fp,"%i ", &is);        // read band number
-		if( (j!=1) || (is<1) || (is>16) ) break; // if band number not read, or if outside range, break
-
-		// read destriping parameters for and is
-		j = fscanf(fp,"%i %i %f %f %f %f %f\n", &(Ndet_arr[is]), &(Niter_arr[is]), &(NEdQ_arr[is]),
-		           &(Tx_arr[is]), &(Ty_arr[is]), &(Qmin_arr[is]), &(Qmax_arr[is]));
-
-		if(j!=7) break;                   // if did not read all parameters, break
-
-		// echo read parameters
-		printf("%i %i %i %f %f %f %f %f\n", is, (Ndet_arr[is]), (Niter_arr[is]), (NEdQ_arr[is]),
-		       (Tx_arr[is]), (Ty_arr[is]), (Qmin_arr[is]), (Qmax_arr[is]));
-
-		isband[is] = 1;                   // set band parameters as "present" for this band
-	}
-
-	// close param. file
-	fclose(fp);
-	//////////////////////////////////////////////////////////////////////////////////////////////////
-	// done reading parameters
-	//////////////////////////////////////////////////////////////////////////////////////////////////
 
 	//////////////////////////////////////////////////////////////////////////////////////////////////
 	// extract the name of band from the file
@@ -159,19 +92,6 @@ run(char *h5file, char *paramfile, char *geofile)
 		printf("ERROR: Invalid band\n");
 		return -7;
 	}
-
-	//////////////////////////////////////////////////////////////////////////////////////////////////
-	// make sure we have parameters for resampling this band
-	//////////////////////////////////////////////////////////////////////////////////////////////////
-	if(isband[is]!=1) {
-		printf("No destriping parameters for this band\n");
-		return 0;
-	}
-
-	// print parameters for the band to be resampled
-	printf("%i %i %i %f %f %f %f %f\n", is, (Ndet_arr[is]), (Niter_arr[is]), (NEdQ_arr[is]),
-	       (Tx_arr[is]), (Ty_arr[is]), (Qmin_arr[is]), (Qmax_arr[is]));
-
 
 	//////////////////////////////////////////////////////////////////////////////////////////////////
 	// prepare all data field strings for later use
@@ -289,11 +209,9 @@ run(char *h5file, char *paramfile, char *geofile)
 
 	// resampling of image on sorted lon, lat grid
 	if(is != 13){
-		resample_viirs(img_in, lat, lon, sx, sy, Qmin_arr[is], Qmax_arr[is],
-			scale*DELETION_ZONE_INT+offset);
+		resample_viirs(img_in, lat, lon, sx, sy, scale*DELETION_ZONE_INT+offset, sortoutput);
 	}else{
-		resample_viirs(img_in, lat, lon, sx, sy, Qmin_arr[is], Qmax_arr[is],
-			DELETION_ZONE_FLOAT);
+		resample_viirs(img_in, lat, lon, sx, sy, DELETION_ZONE_FLOAT, sortoutput);
 	}
 
 
@@ -349,11 +267,10 @@ run(char *h5file, char *paramfile, char *geofile)
 	// free memory
 	free(img_in[0]);
 	free(img_in);
-
-	//////////////////////////////////////////
-	// free(lat[0]);      free(lat);
-	// free(lon[0]);      free(lon);
-	//////////////////////////////////////////
+	free(lat[0]);
+	free(lat);
+	free(lon[0]);
+	free(lon);
 
 	return 0;
 }

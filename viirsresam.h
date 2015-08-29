@@ -34,4 +34,4 @@ int readwrite_viirs_float(float **buffer, unsigned long long * dimsizes, char * 
 int write_viirs_destriping_attribute(char * filename, char * attrFieldStr, char * attrNameStr, float destrval);
 
 // resample.cc
-void resample_viirs(float **imgarr, float **latarr, float **lonarr, int nx, int ny, float min, float max, float delval);
+void resample_viirs(float **imgarr, float **latarr, float **lonarr, int nx, int ny, float delval, bool sortoutput);
