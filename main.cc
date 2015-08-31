@@ -6,6 +6,7 @@
 #include <math.h>
 #include "viirsresam.h"
 
+static void sortlatlon(const char *geofile);
 static int run(char *h5file, char *geofile, bool sortoutput);
 
 char *progname;
@@ -14,6 +15,18 @@ static void
 usage()
 {
 	printf("usage: %s [-s] geofile viirs_h5_file\n", progname);
+	printf("       %s geofile\n", progname);
+	printf("\n");
+	printf("	-s	reorder output by latitude\n");
+	printf("\n");
+	printf("If viirs_h5_file is given, brightness temperature is resampled\n");
+	printf("and saved in the input file, in addition to a \"Resampling\"\n");
+	printf("attribute indicating the data is already resampled.\n");
+	printf("\n");
+	printf("If viirs_h5_file is not given, the latitude and longitude in geofile\n");
+	printf("is reordered to the same order resulting from the -s flag. Also,\n");
+	printf("a \"Resampling\" attribute is added indicating latitude/longitude\n");
+	printf("is already reordered.\n");
 	exit(2);
 }
 
@@ -46,6 +59,10 @@ main(int argc, char** argv)
 		}
 	}
 argdone:
+	if(argc == 1){
+		sortlatlon(argv[0]);
+		exit(0);
+	}
 	if(argc != 2)
 		usage();
 	char *geofile = argv[0];
@@ -58,6 +75,78 @@ argdone:
 	printf("Corresponding geofile = %s\n", geofile);
 
 	return run(h5file, geofile, sortoutput);
+}
+
+#define LATNAME	"All_Data/VIIRS-MOD-GEO_All/Latitude"
+#define LONNAME	"All_Data/VIIRS-MOD-GEO_All/Longitude"
+#define GEO_RESAM_ATTR_NAME	"Resampling"
+
+static void
+sortlatlon(const char *geofile)
+{
+	Mat sind;
+	int status;
+	unsigned long long dims1[32];
+	float *latbuf = NULL;
+	float *lonbuf = NULL;
+	
+	// read latitude & longitude
+	status = readwrite_viirs_float(&latbuf, dims1, geofile, LATNAME, 0);
+	if(status != 0){
+		fprintf(stderr, "Cannot read VIIRS (lat) geolocation data!\n");
+		exit(2);
+	}
+	status = readwrite_viirs_float(&lonbuf, dims1, geofile, LONNAME, 0);
+	if(status != 0){
+		fprintf(stderr, "Cannot read VIIRS (lon) geolocation data!\n");
+		exit(2);
+	}
+	int sy = dims1[0];	// height, along the track
+	int sx = dims1[1];	// width, across track, along scan line
+	Mat lat(sy, sx, CV_32FC1, latbuf);
+	Mat lon(sy, sx, CV_32FC1, lonbuf);
+
+	// sort latitude & longitude
+	getsortingind(sind, sy);
+	Mat slat = resample_sort(sind, lat);
+	Mat slon = resample_sort(sind, lon);
+	CHECKMAT(slat, CV_32FC1);
+	CHECKMAT(slon, CV_32FC1);
+	
+	// write sorted latitude & longitude
+	status = readwrite_viirs_float((float**)&slat.data, dims1, geofile, LATNAME, 1);
+	if(status != 0){
+		fprintf(stderr, "Cannot read VIIRS (lat) geolocation data!\n");
+		exit(2);
+	}
+	status = readwrite_viirs_float((float**)&slon.data, dims1, geofile, LONNAME, 1);
+	if(status != 0){
+		fprintf(stderr, "Cannot read VIIRS (lon) geolocation data!\n");
+		exit(2);
+	}
+
+	// write resampling attribute for latitude & longitude
+	int estat = 0;
+	status = write_viirs_attribute(geofile, LATNAME, GEO_RESAM_ATTR_NAME, 1.0);
+	if(status < 0){
+		printf("ERROR: Cannot write VIIRS attribute!\n");
+		estat = 2;
+	}
+	if(status > 0){
+		printf("WARNING! Data was already resampled\n");
+	}
+	status = write_viirs_attribute(geofile, LONNAME, GEO_RESAM_ATTR_NAME, 1.0);
+	if(status < 0){
+		printf("ERROR: Cannot write VIIRS attribute!\n");
+		estat = 2;
+	}
+	if(status > 0){
+		printf("WARNING! Data was already resampled\n");
+	}
+
+	free(latbuf);
+	free(lonbuf);
+	exit(estat);
 }
 
 static int

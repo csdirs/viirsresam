@@ -221,7 +221,7 @@ resample_sort_(const Mat &sind, const Mat &img)
 
 // Returns the sorted image of the unsorted image img.
 // Sind is the image of sort indices.
-static Mat
+Mat
 resample_sort(const Mat &sind, const Mat &img)
 {
 	switch(img.type()) {
@@ -510,8 +510,8 @@ resample2d(const Mat &sortidx, const Mat &ssrc, const Mat &slat, const Mat &slon
 // Resample a VIIRS swath image.
 //
 // _img -- swath brightness temperature image to be resampled (input & output)
-// _lat -- corresponding latitude image
-// _lon -- corresponding longitude image
+// _lat -- corresponding latitude image (input & output)
+// _lon -- corresponding longitude image (input & output)
 // nx -- width of image (should be 3200 for VIIRS)
 // ny -- height of image (5408 or 5392 for ~10 min VIIRS granule)
 // delval -- value used for deletion zone in _img
@@ -558,9 +558,13 @@ resample_viirs(float **_img, float **_lat, float **_lon, int nx, int ny, float d
 	if(!sortoutput){
 		dst = resample_unsort(sind, dst);
 	}
-	
 	CV_Assert(dst.size() == img.size() && dst.type() == img.type());
 	dst.copyTo(img);
 	if(DEBUG)dumpfloat("final.bin", &_img[0][0], nx*ny);
+	
+	if(sortoutput){
+		slat.copyTo(lat);
+		slon.copyTo(lon);
+	}
 	if(DEBUG)exit(3);
 }

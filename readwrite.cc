@@ -180,7 +180,7 @@ int readwrite_viirs(unsigned short **buffer, unsigned long long * dimsizes, floa
 // Return value:
 // Upon sucessful completion, the return value is 0; nonzero return value indicates error.
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
-int readwrite_viirs_float(float **buffer, unsigned long long * dimsizes, char * filename, char * BTstr, int readwrite)
+int readwrite_viirs_float(float **buffer, unsigned long long * dimsizes, const char * filename, const char * BTstr, int readwrite)
 {
 
 	hid_t   file_id, dataset, dataspace;
@@ -297,7 +297,7 @@ int readwrite_viirs_float(float **buffer, unsigned long long * dimsizes, char * 
 //                negative return value indicates error;
 //                positive return value indicates that the attribute was already set.
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-int write_viirs_attribute(char * filename, char * attrFieldStr, char * attrNameStr, float destrval)
+int write_viirs_attribute(const char *filename, const char *attrFieldStr, const char *attrNameStr, float destrval)
 {
 
 	hid_t   file_id, dataset;

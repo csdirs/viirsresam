@@ -30,8 +30,10 @@ int ** allocate_2d_i(int n1, int n2);
 // readwrite.cc
 int readwrite_viirs(unsigned short **buffer, unsigned long long * dimsizes, float * gain, float * offset, 
                     char * filename, char * BTstr, int readwrite);
-int readwrite_viirs_float(float **buffer, unsigned long long * dimsizes, char * filename, char * BTstr, int readwrite);
-int write_viirs_attribute(char * filename, char * attrFieldStr, char * attrNameStr, float destrval);
+int readwrite_viirs_float(float **buffer, unsigned long long * dimsizes, const char * filename, const char * BTstr, int readwrite);
+int write_viirs_attribute(const char *filename, const char *attrFieldStr, const char *attrNameStr, float destrval);
 
 // resample.cc
 void resample_viirs(float **imgarr, float **latarr, float **lonarr, int nx, int ny, float delval, bool sortoutput);
+void getsortingind(Mat &sind, int height);
+Mat resample_sort(const Mat &sind, const Mat &img);
