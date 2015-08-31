@@ -279,7 +279,7 @@ int readwrite_viirs_float(float **buffer, unsigned long long * dimsizes, char * 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// This subroutine writes a destriping attribute for a particular field in a HDF5 file.
+// This subroutine writes an attribute for a particular field in a HDF5 file.
 //
 // Arguments:
 //
@@ -288,17 +288,16 @@ int readwrite_viirs_float(float **buffer, unsigned long long * dimsizes, char * 
 // char *    attrFieldStr  IN      Name of data field in HDF5 file to which write an attribute
 //                                 Such as "All_Data/VIIRS-M12-SDR_All/BrightnessTemperature"
 //
-// char *    attrNameStr   IN      Name of the attribute to write, such as "Destriping"
+// char *    attrNameStr   IN      Name of the attribute to write, such as "Resampling"
 //
-// float     destrval      IN      Value of the destriping attribute to write
+// float     destrval      IN      Value of the attribute to write
 //
 // Return value:
 // Upon sucessful completion, the return value is nonnegative;
 //                negative return value indicates error;
-//                positive return value indicates that the destriping attribute was already set,
-//                meaning that the data were already destriped before
+//                positive return value indicates that the attribute was already set.
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-int write_viirs_destriping_attribute(char * filename, char * attrFieldStr, char * attrNameStr, float destrval)
+int write_viirs_attribute(char * filename, char * attrFieldStr, char * attrNameStr, float destrval)
 {
 
 	hid_t   file_id, dataset;
@@ -325,7 +324,6 @@ int write_viirs_destriping_attribute(char * filename, char * attrFieldStr, char 
 
 	if(H5Aexists(dataset, attrNameStr)>0) {
 		// attribute already exists
-		printf("WARNING! Data was already destriped\n");
 		retval = 1;
 	} else {
 		// attribute does not exist, create it

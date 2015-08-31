@@ -258,10 +258,13 @@ run(char *h5file, char *geofile, bool sortoutput)
 	//////////////////////////////////////////////////////////////////////////////////////////////////
 	// write a resampled attribute
 	//////////////////////////////////////////////////////////////////////////////////////////////////
-	status = write_viirs_destriping_attribute(h5file, attrfieldstr, attrnamestr, 1.0);
-	if(status<0) {
+	status = write_viirs_attribute(h5file, attrfieldstr, attrnamestr, 1.0);
+	if(status < 0){
 		printf("ERROR: Cannot write VIIRS attribute!\n");
 		return 40*status;
+	}
+	if(status > 0){
+		printf("WARNING! Data was already resampled\n");
 	}
 
 	// free memory
