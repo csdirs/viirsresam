@@ -8,6 +8,7 @@
 
 static void sortlatlon(const char *geofile);
 static int run(char *h5file, char *geofile, bool sortoutput);
+static void run_ghrsst(char *ncfile, bool sortoutput);
 
 char *progname;
 
@@ -35,6 +36,18 @@ usage()
 		argc--;\
 	}while(0);
 
+bool
+is_ghrsst(char *path)
+{
+	char *p = strrchr(path, '/');
+	if(p == NULL){
+		p = path;
+	}else{
+		p++;
+	}
+	return strlen(p) > 20 && strncmp(&p[20], "L2P_GHRSST", strlen("L2P_GHRSST")) == 0;
+}
+
 int
 main(int argc, char** argv)
 {
@@ -59,6 +72,11 @@ main(int argc, char** argv)
 		}
 	}
 argdone:
+	if(argc == 1 && is_ghrsst(argv[0])){
+		printf("resampling GHRSST file...\n");
+		run_ghrsst(argv[0], sortoutput);
+		exit(0);
+	}
 	if(argc == 1){
 		sortlatlon(argv[0]);
 		exit(0);
@@ -148,6 +166,35 @@ sortlatlon(const char *geofile)
 	free(lonbuf);
 	exit(estat);
 }
+
+static void
+run_ghrsst(char *ncfile, bool sortoutput)
+{
+	int ncid, n;
+	Mat _sst, lat, lon;
+	
+	n = nc_open(ncfile, NC_WRITE, &ncid);
+	if(n != NC_NOERR)
+		ncfatal(n, "nc_open failed for %s", ncfile);
+	
+	int varid = ghrsst_readvar(ncid, "sea_surface_temperature", _sst);
+	float offset = ghrsst_readattr(ncid, varid, "add_offset");
+	float scale = ghrsst_readattr(ncid, varid, "scale_factor");
+	printf("scale = %f, offset = %f\n", scale, offset);
+	
+	CHECKMAT(_sst, CV_16SC1);
+	short *sst = (short*)_sst.data;
+	Mat _sstf = Mat::zeros(_sst.size(), CV_32FC1);
+	float *sstf = (float*)_sstf.data;
+	for(int i = 0; i < (int)_sst.total(); i++){
+		sstf[i] = sst[i]*scale + offset;
+	}
+	
+	ghrsst_readvar(ncid, "lat", lat);
+	ghrsst_readvar(ncid, "lon", lon);
+	resample_viirs_mat(_sstf, lat, lon, -999, sortoutput);
+}
+
 
 static int
 run(char *h5file, char *geofile, bool sortoutput)

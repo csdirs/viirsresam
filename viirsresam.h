@@ -3,6 +3,7 @@
 #include <errno.h>
 #include <math.h>
 #include <opencv2/opencv.hpp>
+#include <netcdf.h>
 
 using namespace cv;
 
@@ -33,7 +34,13 @@ int readwrite_viirs(unsigned short **buffer, unsigned long long * dimsizes, floa
 int readwrite_viirs_float(float **buffer, unsigned long long * dimsizes, const char * filename, const char * BTstr, int readwrite);
 int write_viirs_attribute(const char *filename, const char *attrFieldStr, const char *attrNameStr, float destrval);
 
+// readwrite_ghrisst.cc
+void ncfatal(int n, const char *fmt, ...);
+float ghrsst_readattr(int ncid, int varid, const char *name);
+int ghrsst_readvar(int ncid, const char *name, Mat &img);
+
 // resample.cc
+void resample_viirs_mat(Mat &img, Mat &lat, Mat &lon, float delval, bool sortoutput);
 void resample_viirs(float **imgarr, float **latarr, float **lonarr, int nx, int ny, float delval, bool sortoutput);
 void getsortingind(Mat &sind, int height);
 Mat resample_sort(const Mat &sind, const Mat &img);

@@ -1,11 +1,12 @@
 CXX=g++
 LD=g++
 CXXFLAGS=-g -O2 -Wall
-LDFLAGS=-lhdf5 -lz -lpthread -lm -lopencv_core
+LDFLAGS=-lhdf5 -lnetcdf -lz -lpthread -lm -lopencv_core
 TARG=viirsresam
 OFILES=\
 	allocate_2d.o\
 	readwrite.o\
+	readwrite_ghrisst.o\
 	resample.o\
 	main.o\
 

@@ -507,6 +507,58 @@ resample2d(const Mat &sortidx, const Mat &ssrc, const Mat &slat, const Mat &slon
 	if(DEBUG)dumpmat("ilon.bin", ilon);
 }
 
+void
+resample_viirs_mat(Mat &img, Mat &lat, Mat &lon, float delval, bool sortoutput)
+{
+	Mat sind, dst;
+	
+	CHECKMAT(img, CV_32FC1);
+	CHECKMAT(lat, CV_32FC1);
+	CHECKMAT(lon, CV_32FC1);
+	if(DEBUG)dumpmat("before.bin", img);
+	if(DEBUG)dumpmat("lat.bin", lat);
+	if(DEBUG)dumpmat("lon.bin", lon);
+	
+	if(DEBUG) printf("resampling debugging is turned on!\n");
+	
+	DELETION_ZONE_VALUE = delval;
+	if(DEBUG) printf("deletion zone value is %f\n", DELETION_ZONE_VALUE);
+
+	int ny = img.rows;
+	int nx = img.cols;
+	if(ny%NDETECTORS != 0){
+		eprintf("invalid height %d (not multiple of %d)\n", ny, NDETECTORS);
+	}
+	if(nx != VIIRS_WIDTH){
+		eprintf("invalid width %d; want %d", nx, VIIRS_WIDTH);
+	}
+	
+	getsortingind(sind, ny);
+	Mat slat = resample_sort(sind, lat);
+	Mat slon = resample_sort(sind, lon);
+	Mat simg = resample_sort(sind, img);
+	if(DEBUG)dumpmat("sind.bin", sind);
+	if(DEBUG)dumpmat("simg.bin", simg);
+	if(DEBUG)dumpmat("slat.bin", slat);
+	if(DEBUG)dumpmat("slon.bin", slon);
+	
+	resample2d(sind, simg, slat, slon, lon, dst);
+	if(DEBUG)dumpmat("after.bin", dst);
+	
+	if(!sortoutput){
+		dst = resample_unsort(sind, dst);
+	}
+	CV_Assert(dst.size() == img.size() && dst.type() == img.type());
+	dst.copyTo(img);
+	if(DEBUG)dumpmat("final.bin", img);
+	
+	if(sortoutput){
+		slat.copyTo(lat);
+		slon.copyTo(lon);
+	}
+	if(DEBUG)exit(3);
+}
+
 // Resample a VIIRS swath image.
 //
 // _img -- swath brightness temperature image to be resampled (input & output)
