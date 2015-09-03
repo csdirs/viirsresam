@@ -1,6 +1,6 @@
 // column break points
 short SORT_BREAK_POINTS[11] = {
-	12, 95, 179, 367, 576, 725, 856, 1127, 1293, 1306, 1600,
+	5, 87, 170, 358, 567, 720, 850, 997, 1120, 1275, 1600,
 };
 
 // relative row that the pixel comes from
