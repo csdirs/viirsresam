@@ -397,7 +397,7 @@ geoapprox(const float *T, const float *lat, const float *lon, float targlat, flo
 		return T[0];
 	
 	// at least two valid
-	double sqres = SQ(res);
+	double sqres = SQ(res/4.0);
 	double num = 0;
 	double denom = 0;
 	for(int i = 0; i < 3; i++){
@@ -510,11 +510,12 @@ resample1d(const int *sind, const float *sval, const float *slat, const float *s
 	// because interpolation requires 3 consecutive values.
 	rval[0] = INVALID_TEMP;
 	for(i = 1; i < n-1; i++){
-		if(sind[i] == i){	// kept order
-			rval[i] = sval[i];
-		}else{	// reordered
-			rval[i] = geoapprox(&sval[i-1], &slat[i-1], &slon[i-1], slat[i], ilon[i], res);
-		}
+		//if(sind[i] == i){	// kept order
+		//	rval[i] = sval[i];
+		//}else{	// reordered
+		//	rval[i] = geoapprox(&sval[i-1], &slat[i-1], &slon[i-1], slat[i], ilon[i], res);
+		//}
+		rval[i] = geoapprox(&sval[i-1], &slat[i-1], &slon[i-1], slat[i], ilon[i], res);
 	}
 	rval[n-1] = INVALID_TEMP;
 	
