@@ -1,10 +1,14 @@
+enum {
+	NCOLUMN_BREAKS = 11,
+};
+
 // column break points
-short SORT_BREAK_POINTS[11] = {
+short SORT_BREAK_POINTS[NCOLUMN_BREAKS] = {
 	5, 87, 170, 358, 567, 720, 850, 997, 1120, 1275, 1600,
 };
 
 // relative row that the pixel comes from
-short SORT_FIRST[16][11] = {
+short SORT_FIRST[NDETECTORS][NCOLUMN_BREAKS] = {
 	{0,   0,  0,  0,  0,  0,  0,  0,  0,  0, 0},
 	{0,   0,  0,  0,  0,  0,  0,  0,  0,  0, 0},
 	{0,   0,  0,  0,  0,  0,  0,  0,  0,  0, 0},
@@ -24,7 +28,7 @@ short SORT_FIRST[16][11] = {
 };
 
 // relative row that the pixel comes from
-short SORT_MID[16][11] = {
+short SORT_MID[NDETECTORS][NCOLUMN_BREAKS] = {
 	{-5,  +4, +4, -4, +3, -3, +2, -2, +1, -1, 0},
 	{+4,  -5, -5, +3, -4, +2, -3, +1, -2,  0, 0},
 	{-6,  +3, +3, -5, +2, -4, +1, -3,  0,  0, 0},
@@ -44,7 +48,7 @@ short SORT_MID[16][11] = {
 };
 
 // relative row that the pixel comes from
-short SORT_LAST[16][11] = {
+short SORT_LAST[NDETECTORS][NCOLUMN_BREAKS] = {
 	{-5, +4, +4, -4, +3, -3, +2, -2, +1, -1, 0},
 	{+4, -5, -5, +3, -4, +2, -3, +1, -2,  0, 0},
 	{-6, +3, +3, -5, +2, -4, +1, -3,  0,  0, 0},

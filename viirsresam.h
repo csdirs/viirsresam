@@ -10,6 +10,7 @@ using namespace cv;
 #define nelem(x)	(sizeof(x)/sizeof((x)[0]))
 #define CHECKMAT(M, T)	CV_Assert((M).type() == (T) && (M).isContinuous())
 #define SQ(x)	((x)*(x))
+#define SIGN(A)   ((A) > 0 ? 1 : ((A) < 0 ? -1 : 0 ))
 
 enum {
 	VIIRS_WIDTH = 3200,
