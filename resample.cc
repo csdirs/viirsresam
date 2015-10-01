@@ -109,23 +109,29 @@ adjustbreakpoints(const Mat &slat, Mat &breakpointsT)
 	CHECKMAT(slat, CV_32FC1);
 	
 	int nscans = slat.rows/NDETECTORS;
-	short breakpoints[] = {0, 5, 87, 170, 358, 567, 720, 850, 997, 1120, 1275, 1600};
-	short detectorT[] = {2, 8, 1, 2, 1, 2, 1, 2, 1, 0};
+	short breakpoints[1+NCOLUMN_BREAKS] = {0, 5, 87, 170, 358, 567, 720, 850, 997, 1120, 1275, 1600};
+	short detectorT[NCOLUMN_BREAKS-1] = {2, 8, 1, 2, 1, 2, 1, 2, 1, 0};
 	int order = -1;	// for descending
 	//int order = +1;	// for ascending
 	
-	breakpointsT = Mat::zeros(nscans, nelem(breakpoints)-1, CV_32SC1);
+	breakpointsT = Mat::zeros(nscans, NCOLUMN_BREAKS, CV_32SC1);
+	
+	// copy original break points because we don't change all the break points
 	for(int y = 0; y < nscans; y++){
-		breakpointsT.at<int>(y, breakpointsT.cols-1) = 1600;
+		for(int x = 0; x < NCOLUMN_BREAKS; x++){
+			breakpointsT.at<int>(y, x) = SORT_BREAK_POINTS[x];
+		}
 	}
 	
-	for(int j = 0; j < (int)nelem(breakpoints)-2; j++){
+	// Break points for 2nd scan to last scan.
+	// N.B. Terminating break point (1600) is not set here.
+	for(int j = 0; j < NCOLUMN_BREAKS-1; j++){
 		int d = detectorT[j];
 		int br = breakpoints[j+1];
 
-		for(int k = 0; k < nscans; k++){
-			const float *currow = slat.ptr<float>(k*NDETECTORS+d);
-			const float *nextrow = slat.ptr<float>(k*NDETECTORS+d+1);
+		for(int k = 1; k < nscans; k++){
+			const float *currow = slat.ptr<float>(k*NDETECTORS+d-1);
+			const float *nextrow = slat.ptr<float>(k*NDETECTORS+d);
 
 			int leftsign = SIGN(nextrow[br-1] - currow[br-1]);
 			int rightsign = SIGN(nextrow[br+1] - currow[br+1]);
@@ -143,14 +149,13 @@ adjustbreakpoints(const Mat &slat, Mat &breakpointsT)
 			}
 			
 			int count = 1;
-			while(signoff != order && SIGN(breakpoints[j+1+signshift] - signshift*count) == signshift){
+			while(signoff != order && SIGN(breakpoints[j+1+signshift] - br+signshift*count) == signshift){
 				count++;
 				signoff = SIGN(nextrow[br+signshift*count] - currow[br+signshift*count]);
 			}
 			breakpointsT.at<int>(k, j) = br + signshift*(count-1);
 		}
 	}
-	if(DEBUG)dumpmat("breakpointsT.bin", breakpointsT);
 }
 
 // Generate a image of latitude sorting indices.
@@ -235,20 +240,20 @@ getsortingind_right(Mat &sind, int startrow, int endrow, const Mat &breakpoints,
 // breakpoints -- breakpoints with shape [scan] x [number of breakpoints]+2
 //
 void
-getsortingind1(Mat &sind, int height, const Mat &breakpoints)
+getsortingind1(Mat &sind, int height, const Mat &leftbreaks, const Mat &rightbreaks)
 {
-	CHECKMAT(breakpoints, CV_32SC1);
-	CV_Assert(breakpoints.cols == NCOLUMN_BREAKS);
-	
-	sind = Mat::zeros(height, VIIRS_WIDTH, CV_32SC1);
+	CHECKMAT(leftbreaks, CV_32SC1);
+	CHECKMAT(rightbreaks, CV_32SC1);
+	CV_Assert(leftbreaks.cols == NCOLUMN_BREAKS);
+	CV_Assert(rightbreaks.cols == NCOLUMN_BREAKS);
 
-	getsortingind_left(sind, 0, NDETECTORS, breakpoints, SORT_FIRST);
-	getsortingind_left(sind, NDETECTORS, height-NDETECTORS, breakpoints, SORT_MID);
-	getsortingind_left(sind, height-NDETECTORS, height, breakpoints, SORT_LAST);
+	getsortingind_left(sind, 0, NDETECTORS, leftbreaks, SORT_FIRST);
+	getsortingind_left(sind, NDETECTORS, height-NDETECTORS, leftbreaks, SORT_MID);
+	getsortingind_left(sind, height-NDETECTORS, height, leftbreaks, SORT_LAST);
 	
-	getsortingind_right(sind, 0, NDETECTORS, breakpoints, SORT_FIRST);
-	getsortingind_right(sind, NDETECTORS, height-NDETECTORS, breakpoints, SORT_MID);
-	getsortingind_right(sind, height-NDETECTORS, height, breakpoints, SORT_LAST);
+	getsortingind_right(sind, 0, NDETECTORS, rightbreaks, SORT_FIRST);
+	getsortingind_right(sind, NDETECTORS, height-NDETECTORS, rightbreaks, SORT_MID);
+	getsortingind_right(sind, height-NDETECTORS, height, rightbreaks, SORT_LAST);
 }
 
 template <class T>
@@ -677,7 +682,7 @@ resample_viirs_mat(Mat &img, Mat &lat, Mat &lon, float delval, bool sortoutput)
 void
 resample_viirs(float **_img, float **_lat, float **_lon, int nx, int ny, float delval, bool sortoutput)
 {
-	Mat _sind, sind, breakpoints, dst;
+	Mat _sind, sind, leftbreaks, rightbreaks, dst;
 
 	if(DEBUG) printf("resampling debugging is turned on!\n");
 	
@@ -705,11 +710,20 @@ resample_viirs(float **_img, float **_lat, float **_lon, int nx, int ny, float d
 	Mat _slat = resample_sort(_sind, lat);
 	if(DEBUG)dumpmat("_slat.bin", _slat);
 	if(true){
+		sind = Mat::zeros(ny, VIIRS_WIDTH, CV_32SC1);
+		
+		// left half
+		adjustbreakpoints(_slat, leftbreaks);
+		
+		// right half
 		Mat slatflipped = Mat::zeros(_slat.size(), _slat.type());
 		flip(_slat, slatflipped, 1);
 		if(DEBUG)dumpmat("slatflipped.bin", slatflipped);
-		adjustbreakpoints(slatflipped, breakpoints);
-		getsortingind1(sind, ny, breakpoints);
+		adjustbreakpoints(slatflipped, rightbreaks);
+		
+		if(DEBUG)dumpmat("leftbreaks.bin", leftbreaks);
+		if(DEBUG)dumpmat("rightbreaks.bin", rightbreaks);
+		getsortingind1(sind, ny, leftbreaks, rightbreaks);
 	}else{
 		Mat testBP = Mat::zeros(_slat.rows/NDETECTORS, NCOLUMN_BREAKS, CV_32SC1);
 		for(int i = 0; i < testBP.rows; i++){
@@ -717,7 +731,7 @@ resample_viirs(float **_img, float **_lat, float **_lon, int nx, int ny, float d
 				testBP.at<int>(i, j) = SORT_BREAK_POINTS[j];
 			}
 		}
-		getsortingind1(sind, ny, testBP);
+		getsortingind1(sind, ny, testBP, testBP);
 	}
 
 	Mat slat = resample_sort(sind, lat);
