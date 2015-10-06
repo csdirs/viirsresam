@@ -111,8 +111,6 @@ adjustbreakpoints(const Mat &slat, Mat &breakpointsT)
 	int nscans = slat.rows/NDETECTORS;
 	short breakpoints[1+NCOLUMN_BREAKS] = {0, 5, 87, 170, 358, 567, 720, 850, 997, 1120, 1275, 1600};
 	short detectorT[NCOLUMN_BREAKS-1] = {2, 8, 1, 2, 1, 2, 1, 2, 1, 0};
-	int order = -1;	// for descending
-	//int order = +1;	// for ascending
 	
 	breakpointsT = Mat::zeros(nscans, NCOLUMN_BREAKS, CV_32SC1);
 	
@@ -135,6 +133,12 @@ adjustbreakpoints(const Mat &slat, Mat &breakpointsT)
 
 			int leftsign = SIGN(nextrow[br-1] - currow[br-1]);
 			int rightsign = SIGN(nextrow[br+1] - currow[br+1]);
+
+			// find if order is ascending (+1) or descending (-1)
+			int order = SIGN(nextrow[slat.cols/2] - currow[slat.cols/2]);
+			if(order == 0){
+				continue;
+			}
 			
 			if(leftsign == order && rightsign == order){
 				breakpointsT.at<int>(k, j) = br;
@@ -572,7 +576,7 @@ resample2d(const Mat &sortidx, const Mat &ssrc, const Mat &slat, const Mat &slon
 	//float *lat2 = (float*)slat.ptr(1);
 	//float *lon2 = (float*)slon.ptr(1);
 	for(int j = 0; j < width; j++){
-		//res[j] = geodist(lat1[j], lon1[j], lat2[j], lon2[j]);
+		//res[j] = geodist(lat1[j], lon1[j], lat2[j], lon2[j])/4.0;
 		double x = 2*j/(double)width - 1.0;
 		res[j] = 0.2*SQ(x) + 0.2;
 	}
