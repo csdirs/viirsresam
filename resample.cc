@@ -397,7 +397,7 @@ geoapprox(const float *T, const float *lat, const float *lon, float targlat, flo
 		return T[0];
 	
 	// at least two valid
-	double sqres = SQ(res/4.0);
+	double sqres = SQ(res);
 	double num = 0;
 	double denom = 0;
 	for(int i = 0; i < 3; i++){
@@ -567,12 +567,14 @@ resample2d(const Mat &sortidx, const Mat &ssrc, const Mat &slat, const Mat &slon
 	// compute resolution per column based on the first two rows
 	Mat _res = Mat::zeros(1, width, CV_64FC1);
 	double *res = (double*)_res.data;
-	float *lat1 = (float*)slat.ptr(0);
-	float *lon1 = (float*)slon.ptr(0);
-	float *lat2 = (float*)slat.ptr(1);
-	float *lon2 = (float*)slon.ptr(1);
+	//float *lat1 = (float*)slat.ptr(0);
+	//float *lon1 = (float*)slon.ptr(0);
+	//float *lat2 = (float*)slat.ptr(1);
+	//float *lon2 = (float*)slon.ptr(1);
 	for(int j = 0; j < width; j++){
-		res[j] = geodist(lat1[j], lon1[j], lat2[j], lon2[j]);
+		//res[j] = geodist(lat1[j], lon1[j], lat2[j], lon2[j]);
+		double x = 2*j/(double)width - 1.0;
+		res[j] = 0.2*SQ(x) + 0.2;
 	}
 	if(DEBUG)dumpmat("res.bin", _res);
 
