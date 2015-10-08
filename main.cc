@@ -95,8 +95,12 @@ argdone:
 	return run(h5file, geofile, sortoutput);
 }
 
-#define LATNAME	"All_Data/VIIRS-MOD-GEO_All/Latitude"
-#define LONNAME	"All_Data/VIIRS-MOD-GEO_All/Longitude"
+#define _LATNAME	"All_Data/VIIRS-MOD-GEO_All/Latitude"
+#define _LONNAME	"All_Data/VIIRS-MOD-GEO_All/Longitude"
+#define _TCLATNAME	"All_Data/VIIRS-MOD-GEO-TC_All/Latitude"
+#define _TCLONNAME	"All_Data/VIIRS-MOD-GEO-TC_All/Longitude"
+#define LATNAME _LATNAME
+#define LONNAME _LONNAME
 #define GEO_RESAM_ATTR_NAME	"Resampling"
 
 static void
@@ -232,7 +236,7 @@ run(char *h5file, char *geofile, bool sortoutput)
 	//////////////////////////////////////////////////////////////////////////////////////////////////
 	// prepare all data field strings for later use
 	//////////////////////////////////////////////////////////////////////////////////////////////////
-	char attrfieldstr[128], attrnamestr[128], btstr[128], latstr[128], lonstr[128];
+	char attrfieldstr[128], attrnamestr[128], btstr[128];
 
 	// resampling attribute field
 	sprintf(attrfieldstr,"Data_Products/VIIRS-M%i-SDR/VIIRS-M%i-SDR_Aggr", is, is);
@@ -255,13 +259,6 @@ run(char *h5file, char *geofile, bool sortoutput)
 
 
 	//////////////////////////////////////////////////////////////////////////////////////////////////
-	// lat, lon data fields in geofile - normally not needed
-	sprintf(latstr, "All_Data/VIIRS-MOD-GEO_All/Latitude");
-	sprintf(lonstr, "All_Data/VIIRS-MOD-GEO_All/Longitude");
-	//////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-	//////////////////////////////////////////////////////////////////////////////////////////////////
 	// read data
 	//////////////////////////////////////////////////////////////////////////////////////////////////
 	if(is!=13) {
@@ -278,12 +275,12 @@ run(char *h5file, char *geofile, bool sortoutput)
 	///////////////////////////////////////////////////////////////////////////////////////////////
 	// read geolocation data
 	///////////////////////////////////////////////////////////////////////////////////////////////
-	status = readwrite_viirs_float( &bufferf2, dims1, geofile, latstr, 0);
+	status = readwrite_viirs_float( &bufferf2, dims1, geofile, LATNAME, 0);
 	if(status!=0) {
 		fprintf(stderr, "Cannot read VIIRS (lat) geolocation data!\n");
 		exit(1);
 	}
-	status = readwrite_viirs_float( &bufferf3, dims1, geofile, lonstr, 0);
+	status = readwrite_viirs_float( &bufferf3, dims1, geofile, LONNAME, 0);
 	if(status!=0) {
 		fprintf(stderr, "Cannot read VIIRS (lon) geolocation data!\n");
 		exit(1);
