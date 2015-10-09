@@ -687,50 +687,6 @@ resample_viirs_mat(Mat &img, Mat &lat, Mat &lon, float delval, bool sortoutput)
 	if(DEBUG)exit(3);
 }
 
-// Change longitude to be continuous.
-//
-// lon -- longitude (input & output)
-// changed -- where lon was changed. Used to undo the change.
-//
-void
-continuouslon(Mat &_lon, Mat &_changed)
-{
-	CHECKMAT(_lon, CV_32FC1);
-	_changed = Mat::zeros(_lon.size(), CV_8UC1);
-	
-	float *lon = (float*)_lon.data;
-	uchar *changed = (uchar*)_changed.data;
-	
-	for(int i = 0; i < (int)_lon.total(); i++){
-		float q = lon[i];
-		if(q < 0){
-			lon[i] = -q;
-			changed[i] = 255;
-		}
-	}
-}
-
-// Undo longitude change by continuouslon function.
-//
-// lon -- longitude (input & output)
-// changed -- where lon was changed.
-//
-void
-uncontinuouslon(Mat &_lon, Mat &_changed)
-{
-	CHECKMAT(_lon, CV_32FC1);
-	CHECKMAT(_changed, CV_8UC1);
-	
-	float *lon = (float*)_lon.data;
-	uchar *changed = (uchar*)_changed.data;
-	
-	for(int i = 0; i < (int)_lon.total(); i++){
-		if(changed[i]){
-			lon[i] = -lon[i];
-		}
-	}
-}
-
 // Resample a VIIRS swath image.
 //
 // _img -- swath brightness temperature image to be resampled (input & output)
@@ -744,7 +700,7 @@ uncontinuouslon(Mat &_lon, Mat &_changed)
 void
 resample_viirs(float **_img, float **_lat, float **_lon, int nx, int ny, float delval, bool sortoutput)
 {
-	Mat _sind, sind, leftbreaks, rightbreaks, dst, lonchange;
+	Mat _sind, sind, leftbreaks, rightbreaks, dst;
 
 	if(DEBUG) printf("resampling debugging is turned on!\n");
 	
@@ -763,8 +719,6 @@ resample_viirs(float **_img, float **_lat, float **_lon, int nx, int ny, float d
 	Mat img(ny, nx, CV_32FC1, &_img[0][0]);
 	Mat lat(ny, nx, CV_32FC1, &_lat[0][0]);
 	Mat lon(ny, nx, CV_32FC1, &_lon[0][0]);
-
-	//continuouslon(lon, lonchange);
 	
 	if(DEBUG)dumpmat("before.bin", img);
 	if(DEBUG)dumpmat("lat.bin", lat);
@@ -801,7 +755,6 @@ resample_viirs(float **_img, float **_lat, float **_lon, int nx, int ny, float d
 
 	Mat slat = resample_sort(sind, lat);
 	Mat slon = resample_sort(sind, lon);
-	//Mat slonchange = resample_sort(sind, lonchange);
 	Mat simg = resample_sort(sind, img);
 	if(DEBUG)dumpmat("sind.bin", sind);
 	if(DEBUG)dumpmat("simg.bin", simg);
@@ -818,8 +771,6 @@ resample_viirs(float **_img, float **_lat, float **_lon, int nx, int ny, float d
 	dst.copyTo(img);
 	if(DEBUG)dumpfloat("final.bin", &_img[0][0], nx*ny);
 	
-	//uncontinuouslon(lon, lonchange);
-	//uncontinuouslon(slon, slonchange);
 	if(DEBUG)dumpmat("dslon.bin", slon);
 	if(DEBUG)dumpmat("dlon.bin", lon);
 	if(sortoutput){
