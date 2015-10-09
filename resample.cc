@@ -372,10 +372,9 @@ geodist(double lat1, double lon1, double lat2, double lon2)
 	double lam2 = (M_PI * lon2) / 180.0;
 	double delta_phi = phi1 - phi2;
 	double delta_lam = lam1 - lam2;
-	//if(lam2*lam1 < 0){
-	//	delta_lam = -lam1 - lam2;	// crossing meridian
-	//	printf("flipped longitude! %f %f, %f\n", lam1, lam2, fabs(delta_lam));
-	//}
+	if(lam2*lam1 < 0){	// crossing meridian
+		delta_lam = -lam1 - lam2;
+	}
 	return R*sqrt(SQ(cos((phi1+phi2)/2) * delta_lam) + SQ(delta_phi));
 }
 
@@ -419,11 +418,15 @@ geoapprox(const float *T, const float *lat, const float *lon, float targlat, flo
 }
 
 // Linear interpolation at x between points (x0, y0) and (x1, y1).
+// y0 and y1 are logitudes given in radiance.
+// Returned interpolated value is also in radiance.
+//
 inline double
 linearinterp(double x0, double y0, double x1, double y1, double x)
 {
 	double lam = (x - x0)/(x1 - x0);
-	return (1-lam)*y0 + lam*y1;
+	double lam1 = 1-lam;
+	return atan2(lam1*sin(y0) + lam*sin(y1), lam1*cos(y0) + lam*cos(y1));
 }
 
 // Interpolate longitude based on latitude sorting order.
@@ -456,22 +459,21 @@ interplon(const int *sind, const float *slon, const float *lon, int n, float *ds
 	}
 	buf.clear();
 	double prevkeep = i;
-	double prevlon = slon[i];
+	double prevlon = RADIANCE(slon[i]);
 	
 	// interpolate reordered points
 	for(; i < n; i++){
 		// sneak in middle of swath (between middle two detectors)
 		if(i%NDETECTORS == NDETECTORS/2){
 			double curkeep = i-0.5;
-			double curlon = ((double)lon[i]+lon[i-1])/2.0;
-			//if(lon[i]*lon[i-1] < 0){
-			//	curlon = lon[i];
-			//}
+			double phi1 = RADIANCE(lon[i]);
+			double phi2 = RADIANCE(lon[i-1]);
+			double curlon = atan2((sin(phi1) + sin(phi2))/2.0, (cos(phi1) + cos(phi2))/2.0);
 			
 			// interpolate at points in the buffer and clear the buffer
 			for(int j = 0; j < (int)buf.size(); j++){
 				int k = buf[j];
-				dst[k] = linearinterp(prevkeep, prevlon, curkeep, curlon, k);
+				dst[k] = DEGREE(linearinterp(prevkeep, prevlon, curkeep, curlon, k));
 			}
 			buf.clear();
 			
@@ -483,12 +485,12 @@ interplon(const int *sind, const float *slon, const float *lon, int n, float *ds
 			// interpolate at points in the buffer and clear the buffer
 			for(int j = 0; j < (int)buf.size(); j++){
 				int k = buf[j];
-				dst[k] = linearinterp(prevkeep, prevlon, i, slon[i], k);
+				dst[k] = DEGREE(linearinterp(prevkeep, prevlon, i, RADIANCE(slon[i]), k));
 			}
 			buf.clear();
 			
 			prevkeep = i;
-			prevlon = slon[i];
+			prevlon = RADIANCE(slon[i]);
 			dst[i] = slon[i];
 		}else{	// reordered
 			buf.push_back(i);
@@ -497,7 +499,7 @@ interplon(const int *sind, const float *slon, const float *lon, int n, float *ds
 	
 	// extrapolate the reordered points after the last "kept order" point
 	for(int j = 0; j < (int)buf.size(); j++){
-		dst[buf[j]] = prevlon;
+		dst[buf[j]] = DEGREE(prevlon);
 	}
 }
 
@@ -762,7 +764,7 @@ resample_viirs(float **_img, float **_lat, float **_lon, int nx, int ny, float d
 	Mat lat(ny, nx, CV_32FC1, &_lat[0][0]);
 	Mat lon(ny, nx, CV_32FC1, &_lon[0][0]);
 
-	continuouslon(lon, lonchange);
+	//continuouslon(lon, lonchange);
 	
 	if(DEBUG)dumpmat("before.bin", img);
 	if(DEBUG)dumpmat("lat.bin", lat);
@@ -799,7 +801,7 @@ resample_viirs(float **_img, float **_lat, float **_lon, int nx, int ny, float d
 
 	Mat slat = resample_sort(sind, lat);
 	Mat slon = resample_sort(sind, lon);
-	Mat slonchange = resample_sort(sind, lonchange);
+	//Mat slonchange = resample_sort(sind, lonchange);
 	Mat simg = resample_sort(sind, img);
 	if(DEBUG)dumpmat("sind.bin", sind);
 	if(DEBUG)dumpmat("simg.bin", simg);
@@ -816,8 +818,8 @@ resample_viirs(float **_img, float **_lat, float **_lon, int nx, int ny, float d
 	dst.copyTo(img);
 	if(DEBUG)dumpfloat("final.bin", &_img[0][0], nx*ny);
 	
-	uncontinuouslon(lon, lonchange);
-	uncontinuouslon(slon, slonchange);
+	//uncontinuouslon(lon, lonchange);
+	//uncontinuouslon(slon, slonchange);
 	if(DEBUG)dumpmat("dslon.bin", slon);
 	if(DEBUG)dumpmat("dlon.bin", lon);
 	if(sortoutput){

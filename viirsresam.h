@@ -11,6 +11,8 @@ using namespace cv;
 #define CHECKMAT(M, T)	CV_Assert((M).type() == (T) && (M).isContinuous())
 #define SQ(x)	((x)*(x))
 #define SIGN(A)   ((A) > 0 ? 1 : ((A) < 0 ? -1 : 0 ))
+#define RADIANCE(x)	((x)*M_PI/180.0)
+#define DEGREE(x)	((x)*180.0/M_PI)
 
 enum {
 	VIIRS_WIDTH = 3200,
