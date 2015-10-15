@@ -6,10 +6,25 @@
 #include <math.h>
 #include "viirsresam.h"
 
-static void sortlatlon(const char *geofile);
-static int run(char *h5file, char *geofile, bool sortoutput);
-static void run_ghrsst(char *ncfile, bool sortoutput);
-static void run_tcgeo(char *gmodofile, char *gmtcofile, bool sortoutput);
+enum {
+	UNKNOWN,
+	L2P_GHRSST,
+	GMODO,
+	GMTCO,
+};
+
+#define _LATNAME	"All_Data/VIIRS-MOD-GEO_All/Latitude"
+#define _LONNAME	"All_Data/VIIRS-MOD-GEO_All/Longitude"
+#define _TCLATNAME	"All_Data/VIIRS-MOD-GEO-TC_All/Latitude"
+#define _TCLONNAME	"All_Data/VIIRS-MOD-GEO-TC_All/Longitude"
+#define LATNAME _LATNAME
+#define LONNAME _LONNAME
+#define GEO_RESAM_ATTR_NAME	"Resampling"
+
+#define GETARG(x)	do{\
+		(x) = *argv++;\
+		argc--;\
+	}while(0);
 
 char *progname;
 
@@ -32,12 +47,7 @@ usage()
 	exit(2);
 }
 
-#define GETARG(x)	do{\
-		(x) = *argv++;\
-		argc--;\
-	}while(0);
-
-char*
+static char*
 filebasename(char *path)
 {
 	char *p = strrchr(path, '/');
@@ -47,14 +57,7 @@ filebasename(char *path)
 	return p+1;
 }
 
-enum {
-	UNKNOWN,
-	L2P_GHRSST,
-	GMODO,
-	GMTCO,
-};
-
-int
+static int
 getfiletype(char *path)
 {
 	char *p = filebasename(path);
@@ -72,65 +75,6 @@ getfiletype(char *path)
 	}
 	return UNKNOWN;
 }
-
-int
-main(int argc, char** argv)
-{
-	char *flag;
-
-
-	// parse arguments
-	GETARG(progname);
-	bool sortoutput = false;
-	while(argc > 0 && strlen(argv[0]) == 2 && argv[0][0] == '-') {
-		GETARG(flag);
-
-		switch(flag[1]) {
-		default:
-			usage();
-			break;
-		case '-':
-			goto argdone;
-		case 's':
-			sortoutput = true;
-			break;
-		}
-	}
-argdone:
-	if(argc == 1 && getfiletype(argv[0]) == L2P_GHRSST){
-		printf("resampling GHRSST file...\n");
-		run_ghrsst(argv[0], sortoutput);
-		exit(0);
-	}
-	if(argc == 1){
-		sortlatlon(argv[0]);
-		exit(0);
-	}
-	if(argc == 2 && getfiletype(argv[0]) == GMODO && getfiletype(argv[1]) == GMTCO){
-		run_tcgeo(argv[0], argv[1], sortoutput);
-		exit(0);
-	}
-	if(argc != 2)
-		usage();
-	char *geofile = argv[0];
-	char *h5file = argv[1];
-
-	// echo command line
-	printf("viirsresam %s%s %s\n",
-		sortoutput ? "-s " : "",
-		geofile, h5file);
-	printf("Corresponding geofile = %s\n", geofile);
-
-	return run(h5file, geofile, sortoutput);
-}
-
-#define _LATNAME	"All_Data/VIIRS-MOD-GEO_All/Latitude"
-#define _LONNAME	"All_Data/VIIRS-MOD-GEO_All/Longitude"
-#define _TCLATNAME	"All_Data/VIIRS-MOD-GEO-TC_All/Latitude"
-#define _TCLONNAME	"All_Data/VIIRS-MOD-GEO-TC_All/Longitude"
-#define LATNAME _LATNAME
-#define LONNAME _LONNAME
-#define GEO_RESAM_ATTR_NAME	"Resampling"
 
 static void
 sortlatlon(const char *geofile)
@@ -283,9 +227,8 @@ run_tcgeo(char *gmodofile, char *gmtcofile, bool sortoutput)
 	free(buftclon);
 }
 
-
 static int
-run(char *h5file, char *geofile, bool sortoutput)
+run_band(char *h5file, char *geofile, bool sortoutput)
 {
 	unsigned short *buffer1  = NULL;
 	float          *bufferf1 = NULL;
@@ -298,9 +241,7 @@ run(char *h5file, char *geofile, bool sortoutput)
 	double scale, offset;
 	float ** img_in, **lat, **lon;
 
-	//////////////////////////////////////////////////////////////////////////////////////////////////
 	// extract the name of band from the file
-	//////////////////////////////////////////////////////////////////////////////////////////////////
 	is = 0;
 	for(i=(strlen(h5file)-6); i>=0; i--) {
 		// look for sequence "SVM", then following two chars give band number
@@ -317,9 +258,7 @@ run(char *h5file, char *geofile, bool sortoutput)
 		return -7;
 	}
 
-	//////////////////////////////////////////////////////////////////////////////////////////////////
 	// prepare all data field strings for later use
-	//////////////////////////////////////////////////////////////////////////////////////////////////
 	char attrfieldstr[128], attrnamestr[128], btstr[128];
 
 	// resampling attribute field
@@ -341,10 +280,7 @@ run(char *h5file, char *geofile, bool sortoutput)
 	printf("Resampling atribute name = %s\n", attrnamestr);
 	printf("Data location = %s\n", btstr);          // name of main data field to be resampled
 
-
-	//////////////////////////////////////////////////////////////////////////////////////////////////
 	// read data
-	//////////////////////////////////////////////////////////////////////////////////////////////////
 	if(is!=13) {
 		status = readwrite_viirs(&buffer1, dims1, &scale1, &offset1, h5file, btstr, 0);
 	} else {
@@ -355,10 +291,7 @@ run(char *h5file, char *geofile, bool sortoutput)
 		return 10*status;
 	}
 
-
-	///////////////////////////////////////////////////////////////////////////////////////////////
 	// read geolocation data
-	///////////////////////////////////////////////////////////////////////////////////////////////
 	status = readwrite_viirs_float( &bufferf2, dims1, geofile, LATNAME, 0);
 	if(status!=0) {
 		fprintf(stderr, "Cannot read VIIRS (lat) geolocation data!\n");
@@ -369,8 +302,6 @@ run(char *h5file, char *geofile, bool sortoutput)
 		fprintf(stderr, "Cannot read VIIRS (lon) geolocation data!\n");
 		exit(1);
 	}
-	///////////////////////////////////////////////////////////////////////////////////////////////
-
 
 	// extract scale, offset and dimensions info
 	sy = dims1[0]; // height, along the track
@@ -403,9 +334,6 @@ run(char *h5file, char *geofile, bool sortoutput)
 		}
 	}
 
-	/////////////////////////////////////////////////////////////
-	// reample data
-	/////////////////////////////////////////////////////////////
 	// allocate geolocation arrays
 	lat      = allocate_2d_f(sy, sx);
 	lon      = allocate_2d_f(sy, sx);
@@ -430,7 +358,6 @@ run(char *h5file, char *geofile, bool sortoutput)
 	}else{
 		resample_viirs(img_in, lat, lon, sx, sy, DELETION_ZONE_FLOAT, sortoutput);
 	}
-
 
 	// Scale resampled data back to integers if band != M13
 	if(is!=13) {
@@ -472,9 +399,7 @@ run(char *h5file, char *geofile, bool sortoutput)
 		return 10*status;
 	}
 
-	//////////////////////////////////////////////////////////////////////////////////////////////////
 	// write a resampled attribute
-	//////////////////////////////////////////////////////////////////////////////////////////////////
 	status = write_viirs_attribute(h5file, attrfieldstr, attrnamestr, 1.0);
 	if(status < 0){
 		printf("ERROR: Cannot write VIIRS attribute!\n");
@@ -484,7 +409,6 @@ run(char *h5file, char *geofile, bool sortoutput)
 		printf("WARNING! Data was already resampled\n");
 	}
 
-	// free memory
 	free(img_in[0]);
 	free(img_in);
 	free(lat[0]);
@@ -495,4 +419,52 @@ run(char *h5file, char *geofile, bool sortoutput)
 	return 0;
 }
 
+int
+main(int argc, char** argv)
+{
+	char *flag;
 
+	// parse arguments
+	GETARG(progname);
+	bool sortoutput = false;
+	while(argc > 0 && strlen(argv[0]) == 2 && argv[0][0] == '-') {
+		GETARG(flag);
+
+		switch(flag[1]) {
+		default:
+			usage();
+			break;
+		case '-':
+			goto argdone;
+		case 's':
+			sortoutput = true;
+			break;
+		}
+	}
+argdone:
+	if(argc == 1 && getfiletype(argv[0]) == L2P_GHRSST){
+		printf("resampling GHRSST file...\n");
+		run_ghrsst(argv[0], sortoutput);
+		exit(0);
+	}
+	if(argc == 1){
+		sortlatlon(argv[0]);
+		exit(0);
+	}
+	if(argc == 2 && getfiletype(argv[0]) == GMODO && getfiletype(argv[1]) == GMTCO){
+		run_tcgeo(argv[0], argv[1], sortoutput);
+		exit(0);
+	}
+	if(argc != 2)
+		usage();
+	char *geofile = argv[0];
+	char *h5file = argv[1];
+
+	// echo command line
+	printf("viirsresam %s%s %s\n",
+		sortoutput ? "-s " : "",
+		geofile, h5file);
+	printf("Corresponding geofile = %s\n", geofile);
+
+	return run_band(h5file, geofile, sortoutput);
+}
