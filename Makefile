@@ -8,6 +8,7 @@ OFILES=\
 	readwrite.o\
 	readwrite_ghrisst.o\
 	resample.o\
+	utils.o\
 	main.o\
 
 HFILES=\

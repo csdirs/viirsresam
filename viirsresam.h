@@ -47,3 +47,8 @@ void resample_viirs_mat(Mat &img, Mat &lat, Mat &lon, float delval, bool sortout
 void resample_viirs(float **imgarr, float **latarr, float **lonarr, int nx, int ny, float delval, bool sortoutput);
 void getsortingind(Mat &sind, int height);
 Mat resample_sort(const Mat &sind, const Mat &img);
+
+// utils.cc
+void	eprintf(const char *fmt, ...);
+void dumpmat(const char *filename, Mat &m);
+void dumpfloat(const char *filename, float *buf, int nbuf);

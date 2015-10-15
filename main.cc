@@ -9,6 +9,7 @@
 static void sortlatlon(const char *geofile);
 static int run(char *h5file, char *geofile, bool sortoutput);
 static void run_ghrsst(char *ncfile, bool sortoutput);
+static void run_tcgeo(char *gmodofile, char *gmtcofile, bool sortoutput);
 
 char *progname;
 
@@ -36,16 +37,40 @@ usage()
 		argc--;\
 	}while(0);
 
-bool
-is_ghrsst(char *path)
+char*
+filebasename(char *path)
 {
 	char *p = strrchr(path, '/');
 	if(p == NULL){
-		p = path;
-	}else{
-		p++;
+		return path;
 	}
-	return strlen(p) > 20 && strncmp(&p[20], "L2P_GHRSST", strlen("L2P_GHRSST")) == 0;
+	return p+1;
+}
+
+enum {
+	UNKNOWN,
+	L2P_GHRSST,
+	GMODO,
+	GMTCO,
+};
+
+int
+getfiletype(char *path)
+{
+	char *p = filebasename(path);
+	if(strlen(p) > 20 && strncmp(&p[20], "L2P_GHRSST", strlen("L2P_GHRSST")) == 0){
+		return L2P_GHRSST;
+	}
+	if(strlen(p) > 20 && strncmp(&p[20], "L2P_GHRSST", strlen("L2P_GHRSST")) == 0){
+		return L2P_GHRSST;
+	}
+	if(strncmp(p, "GMODO_npp_", strlen("GMODO_npp_")) == 0){
+		return GMODO;
+	}
+	if(strncmp(p, "GMTCO_npp_", strlen("GMTCO_npp_")) == 0){
+		return GMTCO;
+	}
+	return UNKNOWN;
 }
 
 int
@@ -72,13 +97,17 @@ main(int argc, char** argv)
 		}
 	}
 argdone:
-	if(argc == 1 && is_ghrsst(argv[0])){
+	if(argc == 1 && getfiletype(argv[0]) == L2P_GHRSST){
 		printf("resampling GHRSST file...\n");
 		run_ghrsst(argv[0], sortoutput);
 		exit(0);
 	}
 	if(argc == 1){
 		sortlatlon(argv[0]);
+		exit(0);
+	}
+	if(argc == 2 && getfiletype(argv[0]) == GMODO && getfiletype(argv[1]) == GMTCO){
+		run_tcgeo(argv[0], argv[1], sortoutput);
 		exit(0);
 	}
 	if(argc != 2)
@@ -197,6 +226,61 @@ run_ghrsst(char *ncfile, bool sortoutput)
 	ghrsst_readvar(ncid, "lat", lat);
 	ghrsst_readvar(ncid, "lon", lon);
 	resample_viirs_mat(_sstf, lat, lon, -999, sortoutput);
+}
+
+static void
+run_tcgeo(char *gmodofile, char *gmtcofile, bool sortoutput)
+{
+	int status;
+	unsigned long long dims[32];
+	float *buflat = NULL;
+	float *buflon = NULL;
+	float *buftclat = NULL;
+	float *buftclon = NULL;
+	
+	status = readwrite_viirs_float(&buflat, dims, gmodofile, _LATNAME, 0);
+	if(status != 0){
+		eprintf("Cannot read VIIRS (lat) geolocation data!");
+	}
+	status = readwrite_viirs_float(&buflon, dims, gmodofile, _LONNAME, 0);
+	if(status != 0){
+		eprintf("Cannot read VIIRS (lon) geolocation data!\n");
+	}
+	status = readwrite_viirs_float(&buftclat, dims, gmtcofile, _TCLATNAME, 0);
+	if(status != 0){
+		eprintf("Cannot read VIIRS (lat) terrain-corrected geolocation data!");
+	}
+	status = readwrite_viirs_float(&buftclon, dims, gmtcofile, _TCLONNAME, 0);
+	if(status != 0){
+		eprintf("Cannot read VIIRS (lon) terrain-corrected geolocation data!\n");
+	}
+	printf("done reading data\n");
+	Mat lat(dims[0], dims[1], CV_32FC1, buflat);
+	Mat lon(dims[0], dims[1], CV_32FC1, buflon);
+	Mat tclat(dims[0], dims[1], CV_32FC1, buftclat);
+	Mat tclon(dims[0], dims[1], CV_32FC1, buftclon);
+	
+	Mat latdiff = tclat - lat;
+	Mat londiff = tclon - lon;
+	
+	printf("resampling lat\n");
+	if(DEBUG)dumpmat("tclat.bin", tclat);
+	resample_viirs_mat(latdiff, lat, lon, -999, sortoutput);
+	Mat tclatp = lat + latdiff;
+	if(DEBUG)dumpmat("tclatp.bin", tclatp);
+	
+	printf("resampling lon\n");
+	if(DEBUG)dumpmat("tclon.bin", tclon);
+	resample_viirs_mat(londiff, lat, lon, -999, sortoutput);
+	Mat tclonp = lon + londiff;
+	if(DEBUG)dumpmat("tclonp.bin", tclonp);
+
+	if(DEBUG)exit(3);
+	
+	free(buflat);
+	free(buflon);
+	free(buftclat);
+	free(buftclon);
 }
 
 

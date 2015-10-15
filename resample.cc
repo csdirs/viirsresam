@@ -13,24 +13,8 @@ float DELETION_ZONE_VALUE = -999.0;
 inline bool
 isinvalid(float x)
 {
-	return x > MAX_TEMP || x < MIN_TEMP;
-}
-
-static void
-eprintf(const char *fmt, ...)
-{
-	va_list args;
-
-	fflush(stdout);
-	va_start(args, fmt);
-	vfprintf(stderr, fmt, args);
-	va_end(args);
-
-	if(fmt[0] != '\0' && fmt[strlen(fmt)-1] == ':')
-		fprintf(stderr, " %s", strerror(errno));
-	fprintf(stderr, "\n");
-
-	exit(2);
+	//return x > MAX_TEMP || x < MIN_TEMP;
+	return isnan(x);
 }
 
 static const char*
@@ -62,45 +46,6 @@ type2str(int type)
 		return "CV_64FC1";
 		break;
 	}
-}
-
-static void
-dumpmat(const char *filename, Mat &m)
-{
-	int n;
-	FILE *f;
-
-	if(!m.isContinuous()) {
-		eprintf("m not continuous");
-	}
-	f = fopen(filename, "w");
-	if(!f) {
-		eprintf("open %s failed:", filename);
-	}
-	n = fwrite(m.data, m.elemSize1(), m.rows*m.cols, f);
-	if(n != m.rows*m.cols) {
-		fclose(f);
-		eprintf("wrote %d/%d items; write failed:", n, m.rows*m.cols);
-	}
-	fclose(f);
-}
-
-static void
-dumpfloat(const char *filename, float *buf, int nbuf)
-{
-	int n;
-	FILE *f;
-
-	f = fopen(filename, "w");
-	if(!f) {
-		eprintf("open %s failed:", filename);
-	}
-	n = fwrite(buf, sizeof(*buf), nbuf, f);
-	if(n != nbuf) {
-		fclose(f);
-		eprintf("wrote %d/%d items; write failed:", n, nbuf);
-	}
-	fclose(f);
 }
 
 void
@@ -523,7 +468,7 @@ resample1d(const int *sind, const float *sval, const float *slat, const float *s
 	// Interpolate the middle values.
 	// Set first and last values to an invalid value for now
 	// because interpolation requires 3 consecutive values.
-	rval[0] = INVALID_TEMP;
+	rval[0] = NAN;
 	for(i = 1; i < n-1; i++){
 		//if(sind[i] == i){	// kept order
 		//	rval[i] = sval[i];
@@ -532,7 +477,7 @@ resample1d(const int *sind, const float *sval, const float *slat, const float *s
 		//}
 		rval[i] = geoapprox(&sval[i-1], &slat[i-1], &slon[i-1], slat[i], ilon[i], res);
 	}
-	rval[n-1] = INVALID_TEMP;
+	rval[n-1] = NAN;
 	
 	// extrapolate beginning values that are invalid
 	for(i = 0; i < n; i++){
@@ -635,58 +580,6 @@ resample2d(const Mat &sortidx, const Mat &ssrc, const Mat &slat, const Mat &slon
 	if(DEBUG)dumpmat("ilon.bin", ilon);
 }
 
-void
-resample_viirs_mat(Mat &img, Mat &lat, Mat &lon, float delval, bool sortoutput)
-{
-	Mat sind, dst;
-	
-	CHECKMAT(img, CV_32FC1);
-	CHECKMAT(lat, CV_32FC1);
-	CHECKMAT(lon, CV_32FC1);
-	if(DEBUG)dumpmat("before.bin", img);
-	if(DEBUG)dumpmat("lat.bin", lat);
-	if(DEBUG)dumpmat("lon.bin", lon);
-	
-	if(DEBUG) printf("resampling debugging is turned on!\n");
-	
-	DELETION_ZONE_VALUE = delval;
-	if(DEBUG) printf("deletion zone value is %f\n", DELETION_ZONE_VALUE);
-
-	int ny = img.rows;
-	int nx = img.cols;
-	if(ny%NDETECTORS != 0){
-		eprintf("invalid height %d (not multiple of %d)\n", ny, NDETECTORS);
-	}
-	if(nx != VIIRS_WIDTH){
-		eprintf("invalid width %d; want %d", nx, VIIRS_WIDTH);
-	}
-	
-	getsortingind(sind, ny);
-	Mat slat = resample_sort(sind, lat);
-	Mat slon = resample_sort(sind, lon);
-	Mat simg = resample_sort(sind, img);
-	if(DEBUG)dumpmat("sind.bin", sind);
-	if(DEBUG)dumpmat("simg.bin", simg);
-	if(DEBUG)dumpmat("slat.bin", slat);
-	if(DEBUG)dumpmat("slon.bin", slon);
-	
-	resample2d(sind, simg, slat, slon, lon, dst);
-	if(DEBUG)dumpmat("after.bin", dst);
-	
-	if(!sortoutput){
-		dst = resample_unsort(sind, dst);
-	}
-	CV_Assert(dst.size() == img.size() && dst.type() == img.type());
-	dst.copyTo(img);
-	if(DEBUG)dumpmat("final.bin", img);
-	
-	if(sortoutput){
-		slat.copyTo(lat);
-		slon.copyTo(lon);
-	}
-	if(DEBUG)exit(3);
-}
-
 // Resample a VIIRS swath image.
 //
 // _img -- swath brightness temperature image to be resampled (input & output)
@@ -698,36 +591,22 @@ resample_viirs_mat(Mat &img, Mat &lat, Mat &lon, float delval, bool sortoutput)
 // sortoutput -- indicates if output should be in latitude sorted order
 //
 void
-resample_viirs(float **_img, float **_lat, float **_lon, int nx, int ny, float delval, bool sortoutput)
+resample_viirs_mat(Mat &img, Mat &lat, Mat &lon, float delval, bool sortoutput)
 {
 	Mat _sind, sind, leftbreaks, rightbreaks, dst;
-
-	if(DEBUG) printf("resampling debugging is turned on!\n");
 	
-	DELETION_ZONE_VALUE = delval;
-	if(DEBUG) printf("deletion zone value is %f\n", DELETION_ZONE_VALUE);
-
-	if(ny%NDETECTORS != 0){
-		eprintf("invalid height %d (not multiple of %d)\n", ny, NDETECTORS);
-	}
-	if(nx != VIIRS_WIDTH){
-		eprintf("invalid width %d; want %d", nx, VIIRS_WIDTH);
-	}
+	CHECKMAT(img, CV_32FC1);
+	CHECKMAT(lat, CV_32FC1);
+	CHECKMAT(lon, CV_32FC1);
 	
-	// Mat wrapper around external buffer.
-	// Caller of this function still reponsible for freeing the buffers.
-	Mat img(ny, nx, CV_32FC1, &_img[0][0]);
-	Mat lat(ny, nx, CV_32FC1, &_lat[0][0]);
-	Mat lon(ny, nx, CV_32FC1, &_lon[0][0]);
+	int ny = img.rows;
 	
 	if(DEBUG)dumpmat("before.bin", img);
 	if(DEBUG)dumpmat("lat.bin", lat);
 	if(DEBUG)dumpmat("lon.bin", lon);
 
 	getsortingind(_sind, ny);
-	if(DEBUG)dumpmat("_sind.bin", _sind);
 	Mat _slat = resample_sort(_sind, lat);
-	if(DEBUG)dumpmat("_slat.bin", _slat);
 	if(true){
 		sind = Mat::zeros(ny, VIIRS_WIDTH, CV_32SC1);
 		
@@ -737,11 +616,8 @@ resample_viirs(float **_img, float **_lat, float **_lon, int nx, int ny, float d
 		// right half
 		Mat slatflipped = Mat::zeros(_slat.size(), _slat.type());
 		flip(_slat, slatflipped, 1);
-		if(DEBUG)dumpmat("slatflipped.bin", slatflipped);
 		adjustbreakpoints(slatflipped, rightbreaks);
 		
-		if(DEBUG)dumpmat("leftbreaks.bin", leftbreaks);
-		if(DEBUG)dumpmat("rightbreaks.bin", rightbreaks);
 		getsortingind1(sind, ny, leftbreaks, rightbreaks);
 	}else{
 		Mat testBP = Mat::zeros(_slat.rows/NDETECTORS, NCOLUMN_BREAKS, CV_32SC1);
@@ -769,13 +645,38 @@ resample_viirs(float **_img, float **_lat, float **_lon, int nx, int ny, float d
 	}
 	CV_Assert(dst.size() == img.size() && dst.type() == img.type());
 	dst.copyTo(img);
-	if(DEBUG)dumpfloat("final.bin", &_img[0][0], nx*ny);
-	
-	if(DEBUG)dumpmat("dslon.bin", slon);
-	if(DEBUG)dumpmat("dlon.bin", lon);
 	if(sortoutput){
 		slat.copyTo(lat);
 		slon.copyTo(lon);
 	}
+	if(DEBUG)dumpmat("final.bin", img);
+}
+
+void
+resample_viirs(float **_img, float **_lat, float **_lon, int nx, int ny, float delval, bool sortoutput)
+{
+	Mat _sind, sind, leftbreaks, rightbreaks, dst;
+
+	if(DEBUG) printf("resampling debugging is turned on!\n");
+	
+	DELETION_ZONE_VALUE = delval;
+	if(DEBUG) printf("deletion zone value is %f\n", DELETION_ZONE_VALUE);
+
+	if(ny%NDETECTORS != 0){
+		eprintf("invalid height %d (not multiple of %d)\n", ny, NDETECTORS);
+	}
+	if(nx != VIIRS_WIDTH){
+		eprintf("invalid width %d; want %d", nx, VIIRS_WIDTH);
+	}
+
+	// Mat wrapper around external buffer.
+	// Caller of this function still reponsible for freeing the buffers.
+	Mat img(ny, nx, CV_32FC1, &_img[0][0]);
+	Mat lat(ny, nx, CV_32FC1, &_lat[0][0]);
+	Mat lon(ny, nx, CV_32FC1, &_lon[0][0]);
+
+	resample_viirs_mat(img, lat, lon, delval, sortoutput);
+
+	//if(DEBUG)dumpfloat("final.bin", &_img[0][0], nx*ny);
 	if(DEBUG)exit(3);
 }
