@@ -82,28 +82,71 @@ getfiletype(char *path)
 	return UNKNOWN;
 }
 
+static int
+writelatlon(const char *geofile, uvlong *dims, const Mat &slat, const Mat &slon, bool tc)
+{
+	int status;
+	
+	const char *latname = _LATNAME;
+	const char *lonname = _LONNAME;
+	if(tc){
+		latname = _TCLATNAME;
+		lonname = _TCLONNAME;
+	}
+	
+	// write sorted latitude & longitude
+	status = readwrite_viirs_float((float**)&slat.data, dims, geofile, latname, 1);
+	if(status != 0){
+		eprintf("Cannot read VIIRS (lat) geolocation data!");
+	}
+	status = readwrite_viirs_float((float**)&slon.data, dims, geofile, lonname, 1);
+	if(status != 0){
+		eprintf("Cannot read VIIRS (lon) geolocation data!\n");
+	}
+
+	// write resampling attribute for latitude & longitude
+	int estat = 0;
+	status = write_viirs_attribute(geofile, latname, GEO_RESAM_ATTR_NAME, 1.0);
+	if(status < 0){
+		printf("ERROR: Cannot write VIIRS attribute!\n");
+		estat = 2;
+	}
+	if(status > 0){
+		printf("WARNING! Data was already resampled\n");
+	}
+	status = write_viirs_attribute(geofile, lonname, GEO_RESAM_ATTR_NAME, 1.0);
+	if(status < 0){
+		printf("ERROR: Cannot write VIIRS attribute!\n");
+		estat = 2;
+	}
+	if(status > 0){
+		printf("WARNING! Data was already resampled\n");
+	}
+	return estat;
+}
+
 static void
 sortlatlon(const char *geofile)
 {
 	Mat sind;
 	int status;
-	unsigned long long dims1[32];
+	uvlong dims[32];
 	float *latbuf = NULL;
 	float *lonbuf = NULL;
 	
 	// read latitude & longitude
-	status = readwrite_viirs_float(&latbuf, dims1, geofile, LATNAME, 0);
+	status = readwrite_viirs_float(&latbuf, dims, geofile, LATNAME, 0);
 	if(status != 0){
 		fprintf(stderr, "Cannot read VIIRS (lat) geolocation data!\n");
 		exit(2);
 	}
-	status = readwrite_viirs_float(&lonbuf, dims1, geofile, LONNAME, 0);
+	status = readwrite_viirs_float(&lonbuf, dims, geofile, LONNAME, 0);
 	if(status != 0){
 		fprintf(stderr, "Cannot read VIIRS (lon) geolocation data!\n");
 		exit(2);
 	}
-	int sy = dims1[0];	// height, along the track
-	int sx = dims1[1];	// width, across track, along scan line
+	int sy = dims[0];	// height, along the track
+	int sx = dims[1];	// width, across track, along scan line
 	Mat lat(sy, sx, CV_32FC1, latbuf);
 	Mat lon(sy, sx, CV_32FC1, lonbuf);
 
@@ -114,37 +157,8 @@ sortlatlon(const char *geofile)
 	CHECKMAT(slat, CV_32FC1);
 	CHECKMAT(slon, CV_32FC1);
 	
-	// write sorted latitude & longitude
-	status = readwrite_viirs_float((float**)&slat.data, dims1, geofile, LATNAME, 1);
-	if(status != 0){
-		fprintf(stderr, "Cannot read VIIRS (lat) geolocation data!\n");
-		exit(2);
-	}
-	status = readwrite_viirs_float((float**)&slon.data, dims1, geofile, LONNAME, 1);
-	if(status != 0){
-		fprintf(stderr, "Cannot read VIIRS (lon) geolocation data!\n");
-		exit(2);
-	}
-
-	// write resampling attribute for latitude & longitude
-	int estat = 0;
-	status = write_viirs_attribute(geofile, LATNAME, GEO_RESAM_ATTR_NAME, 1.0);
-	if(status < 0){
-		printf("ERROR: Cannot write VIIRS attribute!\n");
-		estat = 2;
-	}
-	if(status > 0){
-		printf("WARNING! Data was already resampled\n");
-	}
-	status = write_viirs_attribute(geofile, LONNAME, GEO_RESAM_ATTR_NAME, 1.0);
-	if(status < 0){
-		printf("ERROR: Cannot write VIIRS attribute!\n");
-		estat = 2;
-	}
-	if(status > 0){
-		printf("WARNING! Data was already resampled\n");
-	}
-
+	int estat = writelatlon(geofile, dims, slat, slon, false);
+	
 	free(latbuf);
 	free(lonbuf);
 	exit(estat);
@@ -185,7 +199,7 @@ static void
 run_tcgeo(char *gmodofile, char *gmtcofile, bool sortoutput)
 {
 	int status;
-	unsigned long long dims[32];
+	uvlong dims[32];
 	float *buflat = NULL;
 	float *buflon = NULL;
 	float *buftclat = NULL;
@@ -207,33 +221,45 @@ run_tcgeo(char *gmodofile, char *gmtcofile, bool sortoutput)
 	if(status != 0){
 		eprintf("Cannot read VIIRS (lon) terrain-corrected geolocation data!\n");
 	}
-	printf("done reading data\n");
 	Mat lat(dims[0], dims[1], CV_32FC1, buflat);
 	Mat lon(dims[0], dims[1], CV_32FC1, buflon);
 	Mat tclat(dims[0], dims[1], CV_32FC1, buftclat);
 	Mat tclon(dims[0], dims[1], CV_32FC1, buftclon);
+	if(DEBUG)dumpmat("tclat.bin", tclat);
+	if(DEBUG)dumpmat("tclon.bin", tclon);
 	
 	Mat latdiff = tclat - lat;
 	Mat londiff = tclon - lon;
 	
+	if(DEBUG && sortoutput){
+		// sort terrain-corrected latitude & longitude for debugging
+		Mat sind;
+		getadjustedsortingind(sind, lat);
+		Mat tcslat = resample_sort(sind, tclat);
+		Mat tcslon = resample_sort(sind, tclon);
+		dumpmat("tcslat.bin", tcslat);
+		dumpmat("tcslon.bin", tcslon);
+	}
+
 	printf("resampling lat\n");
-	if(DEBUG)dumpmat("tclat.bin", tclat);
 	resample_viirs_mat(latdiff, lat, lon, sortoutput);
 	Mat tclatp = lat + latdiff;
 	if(DEBUG)dumpmat("tclatp.bin", tclatp);
-	
+
 	printf("resampling lon\n");
-	if(DEBUG)dumpmat("tclon.bin", tclon);
 	resample_viirs_mat(londiff, lat, lon, sortoutput);
 	Mat tclonp = lon + londiff;
 	if(DEBUG)dumpmat("tclonp.bin", tclonp);
 
-	if(DEBUG)exit(3);
+	if(DEBUG) exit(3);
+
+	int estat = writelatlon(gmtcofile, dims, tclatp, tclonp, true);
 	
 	free(buflat);
 	free(buflon);
 	free(buftclat);
 	free(buftclon);
+	exit(estat);
 }
 
 static int
@@ -253,11 +279,11 @@ getbandname(const char *h5file)
 static void
 run_band(char *h5file, char *geofile, bool sortoutput)
 {
-	unsigned short *buffer1  = NULL;
+	ushort *buffer1  = NULL;
 	float          *bufferf1 = NULL;
 	float          *bufferf2 = NULL;
 	float          *bufferf3 = NULL;
-	unsigned long long dims1[32];
+	uvlong dims1[32];
 	int status, j, is;
 	float scale1, offset1;
 	int sx, sy;
@@ -388,7 +414,7 @@ run_band(char *h5file, char *geofile, bool sortoutput)
 				printf("Output data out of range at ( %5i %5i ): %i\n", ix%sx, ix/sx, j);
 				j = 65535;
 			}
-			buffer1[ix] = (unsigned short) j;
+			buffer1[ix] = (ushort) j;
 		}
 
 		// write resampled data back to file as short int

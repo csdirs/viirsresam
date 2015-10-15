@@ -7,6 +7,9 @@
 
 using namespace cv;
 
+typedef unsigned long long uvlong;
+typedef unsigned short ushort;
+
 #define nelem(x)	(sizeof(x)/sizeof((x)[0]))
 #define CHECKMAT(M, T)	CV_Assert((M).type() == (T) && (M).isContinuous())
 #define SQ(x)	((x)*(x))
@@ -20,7 +23,7 @@ enum {
 	MAX_TEMP = 350,	// in Kelvin
 	MIN_TEMP = 0,	// in Kelvin
 	INVALID_TEMP = -999,
-	DEBUG = false,
+	DEBUG = true,
 	
 	DELETION_ZONE_INT = 65533,
 	DELETION_ZONE_FLOAT = -999,
@@ -46,6 +49,7 @@ int ghrsst_readvar(int ncid, const char *name, Mat &img);
 void resample_viirs_mat(Mat &img, Mat &lat, Mat &lon, bool sortoutput);
 void resample_viirs(float **imgarr, float **latarr, float **lonarr, int nx, int ny, bool sortoutput);
 void getsortingind(Mat &sind, int height);
+void getadjustedsortingind(Mat &sind, const Mat &lat);
 Mat resample_sort(const Mat &sind, const Mat &img);
 
 // utils.cc

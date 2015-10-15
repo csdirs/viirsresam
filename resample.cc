@@ -204,6 +204,39 @@ getsortingind1(Mat &sind, int height, const Mat &leftbreaks, const Mat &rightbre
 	getsortingind_right(sind, height-NDETECTORS, height, rightbreaks, SORT_LAST);
 }
 
+void
+getadjustedsortingind(Mat &sind, const Mat &lat)
+{
+	Mat _sind, leftbreaks, rightbreaks;
+	
+	int ny = lat.rows;
+	
+	getsortingind(_sind, ny);
+	sind = Mat::zeros(ny, VIIRS_WIDTH, CV_32SC1);
+
+	if(true){	// adjusted breaking points
+		Mat _slat = resample_sort(_sind, lat);
+		
+		// left half
+		adjustbreakpoints(_slat, leftbreaks);
+		
+		// right half
+		Mat slatflipped = Mat::zeros(_slat.size(), _slat.type());
+		flip(_slat, slatflipped, 1);
+		adjustbreakpoints(slatflipped, rightbreaks);
+		
+		getsortingind1(sind, ny, leftbreaks, rightbreaks);
+	}else{	// non-adjusted breaking points
+		Mat testBP = Mat::zeros(lat.rows/NDETECTORS, NCOLUMN_BREAKS, CV_32SC1);
+		for(int i = 0; i < testBP.rows; i++){
+			for(int j = 0; j < testBP.cols; j++){
+				testBP.at<int>(i, j) = SORT_BREAK_POINTS[j];
+			}
+		}
+		getsortingind1(sind, ny, testBP, testBP);
+	}
+}
+
 template <class T>
 static Mat
 resample_unsort_(const Mat &sind, const Mat &img)
@@ -507,13 +540,12 @@ resample1d(const int *sind, const float *sval, const float *slat, const float *s
 // slon -- sorted longitude
 // lon -- unsorted longitude
 // dst -- resampled image (output)
+// ilon -- interpolated sorted longitude (output)
 // 
 static void
 resample2d(const Mat &sortidx, const Mat &ssrc, const Mat &slat, const Mat &slon,
-	const Mat &lon, Mat &dst)
+	const Mat &lon, Mat &dst, Mat &ilon)
 {
-	Mat ilon;
-
 	CHECKMAT(ssrc, CV_32FC1);
 	CHECKMAT(slat, CV_32FC1);
 	CHECKMAT(slon, CV_32FC1);
@@ -539,7 +571,7 @@ resample2d(const Mat &sortidx, const Mat &ssrc, const Mat &slat, const Mat &slon
 
 	// allocate output and temporary bufferes for each column
 	dst = Mat::zeros(height, width, CV_32FC1);
-	if(DEBUG) ilon = Mat::zeros(height, width, CV_32FC1);
+	ilon = Mat::zeros(height, width, CV_32FC1);
 	Mat sindcol = Mat::zeros(height, 1, CV_32SC1);
 	Mat ssrccol = Mat::zeros(height, 1, CV_32FC1);
 	Mat slatcol = Mat::zeros(height, 1, CV_32FC1);
@@ -563,7 +595,7 @@ resample2d(const Mat &sortidx, const Mat &ssrc, const Mat &slat, const Mat &slon
 			loncol.ptr<float>(0),
 			height,
 			iloncol.ptr<float>(0));
-		if(DEBUG) iloncol.col(0).copyTo(ilon.col(j));
+		iloncol.col(0).copyTo(ilon.col(j));
 		
 		// resample and copy column to output
 		resample1d(sindcol.ptr<int>(0),
@@ -576,47 +608,22 @@ resample2d(const Mat &sortidx, const Mat &ssrc, const Mat &slat, const Mat &slon
 			dstcol.ptr<float>(0));
 		dstcol.col(0).copyTo(dst.col(j));
 	}
-	if(DEBUG)dumpmat("ilon.bin", ilon);
 }
 
 void
 resample_viirs_mat(Mat &img, Mat &lat, Mat &lon, bool sortoutput)
 {
-	Mat _sind, sind, leftbreaks, rightbreaks, dst;
+	Mat sind, dst, ilon;
 	
 	CHECKMAT(img, CV_32FC1);
 	CHECKMAT(lat, CV_32FC1);
 	CHECKMAT(lon, CV_32FC1);
 	
-	int ny = img.rows;
-	
 	if(DEBUG)dumpmat("before.bin", img);
 	if(DEBUG)dumpmat("lat.bin", lat);
 	if(DEBUG)dumpmat("lon.bin", lon);
 
-	getsortingind(_sind, ny);
-	Mat _slat = resample_sort(_sind, lat);
-	if(true){
-		sind = Mat::zeros(ny, VIIRS_WIDTH, CV_32SC1);
-		
-		// left half
-		adjustbreakpoints(_slat, leftbreaks);
-		
-		// right half
-		Mat slatflipped = Mat::zeros(_slat.size(), _slat.type());
-		flip(_slat, slatflipped, 1);
-		adjustbreakpoints(slatflipped, rightbreaks);
-		
-		getsortingind1(sind, ny, leftbreaks, rightbreaks);
-	}else{
-		Mat testBP = Mat::zeros(_slat.rows/NDETECTORS, NCOLUMN_BREAKS, CV_32SC1);
-		for(int i = 0; i < testBP.rows; i++){
-			for(int j = 0; j < testBP.cols; j++){
-				testBP.at<int>(i, j) = SORT_BREAK_POINTS[j];
-			}
-		}
-		getsortingind1(sind, ny, testBP, testBP);
-	}
+	getadjustedsortingind(sind, lat);
 
 	Mat slat = resample_sort(sind, lat);
 	Mat slon = resample_sort(sind, lon);
@@ -626,17 +633,20 @@ resample_viirs_mat(Mat &img, Mat &lat, Mat &lon, bool sortoutput)
 	if(DEBUG)dumpmat("slat.bin", slat);
 	if(DEBUG)dumpmat("slon.bin", slon);
 	
-	resample2d(sind, simg, slat, slon, lon, dst);
+	resample2d(sind, simg, slat, slon, lon, dst, ilon);
+	CV_Assert(dst.size() == img.size() && dst.type() == img.type());
+	CV_Assert(ilon.size() == lon.size() && ilon.type() == lon.type());
 	if(DEBUG)dumpmat("after.bin", dst);
+	if(DEBUG)dumpmat("ilon.bin", ilon);
 	
 	if(!sortoutput){
 		dst = resample_unsort(sind, dst);
+		ilon = resample_unsort(sind, ilon);
 	}
-	CV_Assert(dst.size() == img.size() && dst.type() == img.type());
 	dst.copyTo(img);
+	ilon.copyTo(lon);
 	if(sortoutput){
 		slat.copyTo(lat);
-		slon.copyTo(lon);
 	}
 	if(DEBUG)dumpmat("final.bin", img);
 }
@@ -653,8 +663,6 @@ resample_viirs_mat(Mat &img, Mat &lat, Mat &lon, bool sortoutput)
 void
 resample_viirs(float **_img, float **_lat, float **_lon, int nx, int ny, bool sortoutput)
 {
-	Mat _sind, sind, leftbreaks, rightbreaks, dst;
-
 	if(DEBUG) printf("resampling debugging is turned on!\n");
 
 	if(ny%NDETECTORS != 0){
