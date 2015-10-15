@@ -195,6 +195,33 @@ run_ghrsst(char *ncfile, bool sortoutput)
 	resample_viirs_mat(_sstf, lat, lon, sortoutput);
 }
 
+double
+lonsum(double a1, double a2)
+{
+	double phi1 = RADIANCE(a1);
+	double phi2 = RADIANCE(a2);
+	//double sum = atan2(sin(phi1) + sin(phi2), cos(phi1) + cos(phi2));
+	double sum = atan2(sin(phi2)*cos(phi1) + cos(phi2)*sin(phi1),
+		cos(phi2)*cos(phi1) - sin(phi2)*sin(phi1));
+	return DEGREE(sum);
+}
+
+void
+lonsummat(const Mat &_src1, const Mat &_src2, Mat &_dst)
+{
+	CHECKMAT(_src1, CV_32FC1);
+	CHECKMAT(_src2, CV_32FC1);
+	_dst = Mat::zeros(_src1.size(), CV_32FC1);
+	
+	float *src1 = (float*)_src1.data;
+	float *src2 = (float*)_src2.data;
+	float *dst = (float*)_dst.data;
+	
+	for(int i = 0; i < (int)_dst.total(); i++){
+		dst[i] = lonsum(src1[i], src2[i]);
+	}
+}
+
 static void
 run_tcgeo(char *gmodofile, char *gmtcofile, bool sortoutput)
 {
@@ -229,7 +256,8 @@ run_tcgeo(char *gmodofile, char *gmtcofile, bool sortoutput)
 	if(DEBUG)dumpmat("tclon.bin", tclon);
 	
 	Mat latdiff = tclat - lat;
-	Mat londiff = tclon - lon;
+	Mat londiff;
+	lonsummat(tclon, -lon, londiff);
 	
 	if(DEBUG && sortoutput){
 		// sort terrain-corrected latitude & longitude for debugging
@@ -248,7 +276,8 @@ run_tcgeo(char *gmodofile, char *gmtcofile, bool sortoutput)
 
 	printf("resampling lon\n");
 	resample_viirs_mat(londiff, lat, lon, sortoutput);
-	Mat tclonp = lon + londiff;
+	Mat tclonp;
+	lonsummat(lon, londiff, tclonp);
 	if(DEBUG)dumpmat("tclonp.bin", tclonp);
 
 	if(DEBUG) exit(3);
