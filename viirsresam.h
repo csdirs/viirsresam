@@ -20,7 +20,7 @@ enum {
 	MAX_TEMP = 350,	// in Kelvin
 	MIN_TEMP = 0,	// in Kelvin
 	INVALID_TEMP = -999,
-	DEBUG = true,
+	DEBUG = false,
 	
 	DELETION_ZONE_INT = 65533,
 	DELETION_ZONE_FLOAT = -999,
@@ -43,8 +43,8 @@ float ghrsst_readattr(int ncid, int varid, const char *name);
 int ghrsst_readvar(int ncid, const char *name, Mat &img);
 
 // resample.cc
-void resample_viirs_mat(Mat &img, Mat &lat, Mat &lon, float delval, bool sortoutput);
-void resample_viirs(float **imgarr, float **latarr, float **lonarr, int nx, int ny, float delval, bool sortoutput);
+void resample_viirs_mat(Mat &img, Mat &lat, Mat &lon, bool sortoutput);
+void resample_viirs(float **imgarr, float **latarr, float **lonarr, int nx, int ny, bool sortoutput);
 void getsortingind(Mat &sind, int height);
 Mat resample_sort(const Mat &sind, const Mat &img);
 

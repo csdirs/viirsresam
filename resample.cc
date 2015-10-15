@@ -6,14 +6,13 @@
 #include "sort.h"
 
 // Pixels in deletion zone are given this value.
-// It's -999.0 for band 13, and scaled value of integer 65533 for other bands.
-// Set during entery point of resampling, in resample_viirs.
-float DELETION_ZONE_VALUE = -999.0;
+// It's -999.0 for band 13, and scaled value of integer 65533 for other bands,
+// but those values are set to NAN in main function.
+float DELETION_ZONE_VALUE = NAN;
 
 inline bool
 isinvalid(float x)
 {
-	//return x > MAX_TEMP || x < MIN_TEMP;
 	return isnan(x);
 }
 
@@ -580,18 +579,8 @@ resample2d(const Mat &sortidx, const Mat &ssrc, const Mat &slat, const Mat &slon
 	if(DEBUG)dumpmat("ilon.bin", ilon);
 }
 
-// Resample a VIIRS swath image.
-//
-// _img -- swath brightness temperature image to be resampled (input & output)
-// _lat -- corresponding latitude image (input & output)
-// _lon -- corresponding longitude image (input & output)
-// nx -- width of image (should be 3200 for VIIRS)
-// ny -- height of image (5408 or 5392 for ~10 min VIIRS granule)
-// delval -- value used for deletion zone in _img
-// sortoutput -- indicates if output should be in latitude sorted order
-//
 void
-resample_viirs_mat(Mat &img, Mat &lat, Mat &lon, float delval, bool sortoutput)
+resample_viirs_mat(Mat &img, Mat &lat, Mat &lon, bool sortoutput)
 {
 	Mat _sind, sind, leftbreaks, rightbreaks, dst;
 	
@@ -652,15 +641,21 @@ resample_viirs_mat(Mat &img, Mat &lat, Mat &lon, float delval, bool sortoutput)
 	if(DEBUG)dumpmat("final.bin", img);
 }
 
+// Resample a VIIRS swath image.
+//
+// _img -- swath brightness temperature image to be resampled (input & output)
+// _lat -- corresponding latitude image (input & output)
+// _lon -- corresponding longitude image (input & output)
+// nx -- width of image (should be 3200 for VIIRS)
+// ny -- height of image (5408 or 5392 for ~10 min VIIRS granule)
+// sortoutput -- indicates if output should be in latitude sorted order
+//
 void
-resample_viirs(float **_img, float **_lat, float **_lon, int nx, int ny, float delval, bool sortoutput)
+resample_viirs(float **_img, float **_lat, float **_lon, int nx, int ny, bool sortoutput)
 {
 	Mat _sind, sind, leftbreaks, rightbreaks, dst;
 
 	if(DEBUG) printf("resampling debugging is turned on!\n");
-	
-	DELETION_ZONE_VALUE = delval;
-	if(DEBUG) printf("deletion zone value is %f\n", DELETION_ZONE_VALUE);
 
 	if(ny%NDETECTORS != 0){
 		eprintf("invalid height %d (not multiple of %d)\n", ny, NDETECTORS);
@@ -675,7 +670,7 @@ resample_viirs(float **_img, float **_lat, float **_lon, int nx, int ny, float d
 	Mat lat(ny, nx, CV_32FC1, &_lat[0][0]);
 	Mat lon(ny, nx, CV_32FC1, &_lon[0][0]);
 
-	resample_viirs_mat(img, lat, lon, delval, sortoutput);
+	resample_viirs_mat(img, lat, lon, sortoutput);
 
 	//if(DEBUG)dumpfloat("final.bin", &_img[0][0], nx*ny);
 	if(DEBUG)exit(3);
