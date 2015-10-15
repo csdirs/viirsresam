@@ -37,19 +37,18 @@ isinvalidBT(float x)
 static void
 usage()
 {
-	printf("usage: %s [-s] geofile viirs_h5_file\n", progname);
-	printf("       %s geofile\n", progname);
+	printf("usage: %s GMODOfile viirs_h5_file\n", progname);
+	printf("       %s GMODOfile GMTCOfile\n", progname);
 	printf("\n");
-	printf("	-s	reorder output by latitude\n");
+	printf("GMODOfile is a VIIRS geolocation file without terrain correction.\n");
+	printf("GMTCOfile is a VIIRS geolocation file with terrain correction.\n");
+	printf("Viirs_h5_file is a VIIRS brightness temperature band file.\n");
 	printf("\n");
-	printf("If viirs_h5_file is given, brightness temperature is resampled\n");
-	printf("and saved in the input file, in addition to a \"Resampling\"\n");
-	printf("attribute indicating the data is already resampled.\n");
-	printf("\n");
-	printf("If viirs_h5_file is not given, the latitude and longitude in geofile\n");
-	printf("is reordered to the same order resulting from the -s flag. Also,\n");
-	printf("a \"Resampling\" attribute is added indicating latitude/longitude\n");
-	printf("is already reordered.\n");
+	printf("If viirs_h5_file is given, brightness temperature is resampled and\n");
+	printf("saved in viirs_h5_file. If GMTCOfile is given, the terrain corrected\n");
+	printf("latitude and logitude is resampled and saved in GMTCOfile. In both\n");
+	printf("cases, a \"Resampling\" attribute is also written, indicating the data\n");
+	printf("is already resampled.\n");
 	exit(2);
 }
 
@@ -487,10 +486,13 @@ int
 main(int argc, char** argv)
 {
 	char *flag;
-
+	
+	// We no longer can undo sorting because adjusting breaking points
+	// makes "sorting" not be a permutation.
+	bool sortoutput = true;
+	
 	// parse arguments
 	GETARG(progname);
-	bool sortoutput = false;
 	while(argc > 0 && strlen(argv[0]) == 2 && argv[0][0] == '-') {
 		GETARG(flag);
 
@@ -500,18 +502,15 @@ main(int argc, char** argv)
 			break;
 		case '-':
 			goto argdone;
-		case 's':
-			sortoutput = true;
-			break;
 		}
 	}
 argdone:
-	if(argc == 1 && getfiletype(argv[0]) == L2P_GHRSST){
+	if(false && argc == 1 && getfiletype(argv[0]) == L2P_GHRSST){
 		printf("resampling GHRSST file...\n");
 		run_ghrsst(argv[0], sortoutput);
 		exit(0);
 	}
-	if(argc == 1){
+	if(false && argc == 1){
 		sortlatlon(argv[0]);
 		exit(0);
 	}
@@ -525,9 +524,7 @@ argdone:
 	char *h5file = argv[1];
 
 	// echo command line
-	printf("viirsresam %s%s %s\n",
-		sortoutput ? "-s " : "",
-		geofile, h5file);
+	printf("viirsresam %s %s\n", geofile, h5file);
 	printf("Corresponding geofile = %s\n", geofile);
 
 	run_band(h5file, geofile, sortoutput);

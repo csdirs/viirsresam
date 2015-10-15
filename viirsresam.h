@@ -23,7 +23,7 @@ enum {
 	MAX_TEMP = 350,	// in Kelvin
 	MIN_TEMP = 0,	// in Kelvin
 	INVALID_TEMP = -999,
-	DEBUG = true,
+	DEBUG = false,
 	
 	DELETION_ZONE_INT = 65533,
 	DELETION_ZONE_FLOAT = -999,
