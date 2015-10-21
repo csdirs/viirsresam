@@ -67,12 +67,14 @@ usage()
 	printf("\n");
 	printf("GMODOfile is a VIIRS geolocation file without terrain correction.\n");
 	printf("GMTCOfile is a VIIRS geolocation file with terrain correction.\n");
-	printf("Viirs_h5_file is a VIIRS brightness temperature band file.\n");
+	printf("Viirs_h5_file is a VIIRS band file.\n");
 	printf("\n");
-	printf("If viirs_h5_file is given, brightness temperature is resampled and\n");
-	printf("saved in viirs_h5_file. If GMTCOfile is given, the terrain corrected\n");
-	printf("latitude and logitude is resampled and saved in GMTCOfile. In both\n");
-	printf("cases, a \"Resampling\" attribute is also written, indicating the data\n");
+	printf("If viirs_h5_file is given, reflectance is resampled for bands\n");
+	printf("M11 and below, and brightness temperature is resampled for bands\n");
+	printf("M12 and above. The result is saved back into viirs_h5_file.\n");
+	printf("If GMTCOfile is given, the terrain corrected latitude and\n");
+	printf("logitude is resampled and saved in GMTCOfile. In both cases,\n");
+	printf("a \"Resampling\" attribute is also written, indicating the data\n");
 	printf("is already resampled.\n");
 	exit(2);
 }
