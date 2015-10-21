@@ -29,10 +29,35 @@ enum {
 char *progname;
 
 inline bool
-isinvalidBT(float x)
+isushortfill(ushort x)
 {
-	return x > MAX_TEMP || x < MIN_TEMP;
+	switch(x){
+	case NA_UINT16_FILL:
+	case MISS_UINT16_FILL:
+	case ONBOARD_PT_UINT16_FILL:
+	case ONGROUND_PT_UINT16_FILL:
+	case ERR_UINT16_FILL:
+	case VDNE_UINT16_FILL:
+	case SOUB_UINT16_FILL:
+		return true;
+	}
+	return false;
 }
+
+inline bool
+isfloatfill(float x)
+{
+	if(x == NA_FLOAT32_FILL
+	|| x == MISS_FLOAT32_FILL
+	|| x == ONBOARD_PT_FLOAT32_FILL
+	|| x == ONGROUND_PT_FLOAT32_FILL
+	|| x == ERR_FLOAT32_FILL
+	|| x == VDNE_FLOAT32_FILL){
+		return true;
+	}
+	return false;
+}
+
 
 static void
 usage()
@@ -184,9 +209,6 @@ run_ghrsst(char *ncfile, bool sortoutput)
 	float *sstf = (float*)_sstf.data;
 	for(int i = 0; i < (int)_sst.total(); i++){
 		sstf[i] = sst[i]*scale + offset;
-		if(isinvalidBT(sstf[i])){
-			sstf[i] = NAN;
-		}
 	}
 	
 	ghrsst_readvar(ncid, "lat", lat);
@@ -384,20 +406,22 @@ run_band(char *h5file, char *geofile, bool sortoutput)
 	// if needed, apply scale and offset to get physical data
 	if(is!=13) {
 		for(int ix=0; ix<sx*sy; ix++) {
-			float bt = scale*buffer1[ix] + offset;
-			if(isinvalidBT(bt)){
-				bt = NAN;
+			ushort val = buffer1[ix];
+			if(isushortfill(val)){
+				img_in[0][ix] = NAN;
+			}else{
+				img_in[0][ix] = scale*val + offset;
 			}
-			img_in[0][ix] = bt;
 		}
 	} else {
 		// no scaling for band 13
 		for(int ix=0; ix<sx*sy; ix++) {
-			float bt = bufferf1[ix];
-			if(isinvalidBT(bt)){
-				bt = NAN;
+			float val = bufferf1[ix];
+			if(isfloatfill(val)){
+				img_in[0][ix] = NAN;
+			}else{
+				img_in[0][ix] = val;
 			}
-			img_in[0][ix] = bt;
 		}
 	}
 

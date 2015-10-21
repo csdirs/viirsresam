@@ -17,18 +17,32 @@ typedef unsigned short ushort;
 #define RADIANCE(x)	((x)*M_PI/180.0)
 #define DEGREE(x)	((x)*180.0/M_PI)
 
+// Bands 1-11 reflectance, and bands 12, 14-16 brightnesss temperature
+const ushort NA_UINT16_FILL = 65535;
+const ushort MISS_UINT16_FILL = 65534;
+const ushort ONBOARD_PT_UINT16_FILL = 65533;
+const ushort ONGROUND_PT_UINT16_FILL = 65532;
+const ushort ERR_UINT16_FILL = 65531;
+const ushort VDNE_UINT16_FILL = 65529;
+const ushort SOUB_UINT16_FILL = 65528;
+
+// Band 13 brightnesss temperature
+const float NA_FLOAT32_FILL = -999.9;
+const float MISS_FLOAT32_FILL = -999.8;
+const float ONBOARD_PT_FLOAT32_FILL = -999.7;
+const float ONGROUND_PT_FLOAT32_FILL = -999.6;
+const float ERR_FLOAT32_FILL = -999.5;
+const float VDNE_FLOAT32_FILL = -999.3;
+
+const ushort DELETION_ZONE_INT = ONBOARD_PT_UINT16_FILL;
+const float DELETION_ZONE_FLOAT = ONBOARD_PT_FLOAT32_FILL;
+
 enum {
 	VIIRS_WIDTH = 3200,
 	NDETECTORS = 16,
-	MAX_TEMP = 350,	// in Kelvin
-	MIN_TEMP = 0,	// in Kelvin
 	INVALID_TEMP = -999,
 	DEBUG = false,
-	
-	DELETION_ZONE_INT = 65533,
-	DELETION_ZONE_FLOAT = -999,
 };
-
 
 // allocate_2d.cc
 float ** allocate_2d_f(int n1, int n2);
