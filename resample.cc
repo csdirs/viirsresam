@@ -269,7 +269,7 @@ resample_unsort(const Mat &sind, const Mat &img)
 {
 	switch(img.type()) {
 	default:
-		eprintf("unsupported type %s\n", type2str(img.type()));
+		eprintf("resample_unsort: unsupported type %s\n", type2str(img.type()));
 		break;
 	case CV_8UC1:
 		return resample_unsort_<uchar>(sind, img);
@@ -317,10 +317,13 @@ resample_sort(const Mat &sind, const Mat &img)
 {
 	switch(img.type()) {
 	default:
-		eprintf("unsupported type %s\n", type2str(img.type()));
+		eprintf("resample_sort: unsupported type %s\n", type2str(img.type()));
 		break;
 	case CV_8UC1:
 		return resample_sort_<uchar>(sind, img);
+		break;
+	case CV_16UC1:
+		return resample_sort_<ushort>(sind, img);
 		break;
 	case CV_32FC1:
 		return resample_sort_<float>(sind, img);

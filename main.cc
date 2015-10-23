@@ -442,33 +442,50 @@ run_band(char *h5file, char *geofile, bool sortoutput)
 	free(bufferf2);
 	free(bufferf3);
 
+	Mat sind, _simg, _simgf;
+	ushort *simg;
+	float *simgf;
+	Mat origlat(sy, sx, CV_32FC1, bufferf2);
+	getadjustedsortingind(sind, origlat);
+	
 	// resampling of image on sorted lon, lat grid
 	if(is != 13){
 		resample_viirs(img_in, lat, lon, sx, sy, sortoutput);
+
+		Mat _img_in(sy, sx, CV_16UC1, buffer1);
+		_simg = resample_sort(sind, _img_in);
+		CHECKMAT(_simg, CV_16UC1);
+		simg = (ushort*)_simg.data;
 	}else{
 		resample_viirs(img_in, lat, lon, sx, sy, sortoutput);
+
+		Mat _img_in(sy, sx, CV_32FC1, bufferf1);
+		_simgf = resample_sort(sind, _img_in);
+		CHECKMAT(_simgf, CV_32FC1);
+		simgf = (float*)_simgf.data;
 	}
+	
 
 	// Scale resampled data back to integers if band != M13
 	if(is!=13) {
 		for(int ix=0; ix<sx*sy; ix++) {
-			if(isnan(img_in[0][ix])){
-				img_in[0][ix] = scale*DELETION_ZONE_INT+offset;
+			if((isushortfill(simg[ix]) && simg[ix] != DELETION_ZONE_INT) || isnan(img_in[0][ix])){
+				buffer1[ix] = simg[ix];
+			}else{
+				// scale resampled data back to integer value
+				j = (int) round((img_in[0][ix] - offset)/scale);
+	
+				// check if integer is in the valid range
+				if(j<0) {
+					printf("Output data out of range at ( %5i %5i ): %i\n", ix%sx, ix/sx, j);
+					j = 0;
+				}
+				if(j>65535) {
+					printf("Output data out of range at ( %5i %5i ): %i\n", ix%sx, ix/sx, j);
+					j = 65535;
+				}
+				buffer1[ix] = (ushort) j;
 			}
-
-			// scale resampled data back to integer value
-			j = (int) round((img_in[0][ix] - offset)/scale);
-
-			// check if integer is in the valid range
-			if(j<0) {
-				printf("Output data out of range at ( %5i %5i ): %i\n", ix%sx, ix/sx, j);
-				j = 0;
-			}
-			if(j>65535) {
-				printf("Output data out of range at ( %5i %5i ): %i\n", ix%sx, ix/sx, j);
-				j = 65535;
-			}
-			buffer1[ix] = (ushort) j;
 		}
 
 		// write resampled data back to file as short int
@@ -477,10 +494,11 @@ run_band(char *h5file, char *geofile, bool sortoutput)
 	} else {
 		// no conversion for band M13
 		for(int ix=0; ix<sx*sy; ix++) {
-			if(isnan(img_in[0][ix])){
-				img_in[0][ix] = DELETION_ZONE_FLOAT;
+			if((isfloatfill(simgf[ix]) && simgf[ix] != DELETION_ZONE_FLOAT) || isnan(img_in[0][ix])){
+				bufferf1[ix] = simgf[ix];
+			}else{
+				bufferf1[ix] = img_in[0][ix];
 			}
-			bufferf1[ix] = img_in[0][ix];
 		}
 
 		// write resampled band M13 data back to file as float
