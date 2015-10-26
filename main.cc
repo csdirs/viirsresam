@@ -64,6 +64,9 @@ usage()
 {
 	printf("usage: %s GMODOfile viirs_h5_file\n", progname);
 	printf("       %s GMODOfile GMTCOfile\n", progname);
+	printf("       %s -V\n", progname);
+	printf("\n");
+	printf("	-V	print the version of the program and exit\n");
 	printf("\n");
 	printf("GMODOfile is a VIIRS geolocation file without terrain correction.\n");
 	printf("GMTCOfile is a VIIRS geolocation file with terrain correction.\n");
@@ -544,6 +547,9 @@ main(int argc, char** argv)
 		default:
 			usage();
 			break;
+		case 'V':
+			printf("viirsresam version " VERSION "\n");
+			exit(0);
 		case '-':
 			goto argdone;
 		}
