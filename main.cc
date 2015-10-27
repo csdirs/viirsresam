@@ -274,21 +274,21 @@ run_tcgeo(char *gmodofile, char *gmtcofile, bool sortoutput)
 	if(status != 0){
 		eprintf("Cannot read VIIRS (lon) terrain-corrected geolocation data!\n");
 	}
-	Mat lat(dims[0], dims[1], CV_32FC1, buflat);
-	Mat lon(dims[0], dims[1], CV_32FC1, buflon);
+	Mat origlat(dims[0], dims[1], CV_32FC1, buflat);
+	Mat origlon(dims[0], dims[1], CV_32FC1, buflon);
 	Mat tclat(dims[0], dims[1], CV_32FC1, buftclat);
 	Mat tclon(dims[0], dims[1], CV_32FC1, buftclon);
 	if(DEBUG)dumpmat("tclat.bin", tclat);
 	if(DEBUG)dumpmat("tclon.bin", tclon);
 	
-	Mat latdiff = tclat - lat;
+	Mat latdiff = tclat - origlat;
 	Mat londiff;
-	lonsummat(tclon, -lon, londiff);
+	lonsummat(tclon, -origlon, londiff);
 	
 	if(DEBUG && sortoutput){
 		// sort terrain-corrected latitude & longitude for debugging
 		Mat sind;
-		getadjustedsortingind(sind, lat);
+		getadjustedsortingind(sind, origlat);
 		Mat tcslat = resample_sort(sind, tclat);
 		Mat tcslon = resample_sort(sind, tclon);
 		dumpmat("tcslat.bin", tcslat);
@@ -296,11 +296,15 @@ run_tcgeo(char *gmodofile, char *gmtcofile, bool sortoutput)
 	}
 
 	printf("resampling lat\n");
+	Mat lat = origlat.clone();
+	Mat lon = origlon.clone();
 	resample_viirs_mat(latdiff, lat, lon, sortoutput);
 	Mat tclatp = lat + latdiff;
 	if(DEBUG)dumpmat("tclatp.bin", tclatp);
 
 	printf("resampling lon\n");
+	lat = origlat.clone();
+	lon = origlon.clone();
 	resample_viirs_mat(londiff, lat, lon, sortoutput);
 	Mat tclonp;
 	lonsummat(lon, londiff, tclonp);
