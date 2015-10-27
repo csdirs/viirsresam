@@ -503,7 +503,7 @@ resample1d(const int *sind, const float *sval, const float *slat, const float *s
 	// Interpolate the middle values.
 	// Set first and last values to an invalid value for now
 	// because interpolation requires 3 consecutive values.
-	rval[0] = NAN;
+	rval[0] = sval[0];
 	for(i = 1; i < n-1; i++){
 		//if(sind[i] == i){	// kept order
 		//	rval[i] = sval[i];
@@ -512,27 +512,7 @@ resample1d(const int *sind, const float *sval, const float *slat, const float *s
 		//}
 		rval[i] = geoapprox(&sval[i-1], &slat[i-1], &slon[i-1], slat[i], ilon[i], res);
 	}
-	rval[n-1] = NAN;
-	
-	// extrapolate beginning values that are invalid
-	for(i = 0; i < n; i++){
-		if(!isinvalid(rval[i])){
-			break;
-		}
-	}
-	for(int k = 0; k < i; k++){
-		rval[k] = rval[i];
-	}
-	
-	// extrapolate ending values that are invalid
-	for(i = n-1; i >= 0; i--){
-		if(!isinvalid(rval[i])){
-			break;
-		}
-	}
-	for(int k = i+1; k < n; k++){
-		rval[k] = rval[i];
-	}
+	rval[n-1] = sval[n-1];
 }
 
 // Resample a 2D image.
