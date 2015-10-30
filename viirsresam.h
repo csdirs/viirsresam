@@ -7,7 +7,7 @@
 
 using namespace cv;
 
-#define VERSION "0.3.1"
+#define VERSION "1.0"
 
 typedef unsigned long long uvlong;
 typedef unsigned short ushort;
