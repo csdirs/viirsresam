@@ -336,7 +336,7 @@ getbandname(const char *h5file)
 }
 
 static void
-run_band(char *h5file, char *geofile, bool sortoutput)
+run_band(char *h5file, char *geofile, bool sortoutput, bool extra)
 {
 	ushort *buffer1  = NULL;
 	float          *bufferf1 = NULL;
@@ -348,7 +348,7 @@ run_band(char *h5file, char *geofile, bool sortoutput)
 	int sx, sy;
 	double scale, offset;
 	float ** img_in, **lat, **lon;
-	char attrfieldstr[128], attrnamestr[128], btstr[128];
+	char attrfieldstr[128], attrnamestr[128], btstr[128], reorderstr[128];
 
 	// extract the name of band from the file
 	is = getbandname(h5file);
@@ -365,10 +365,12 @@ run_band(char *h5file, char *geofile, bool sortoutput)
 		// for M11 and below, resample Reflectance
 		sprintf(attrnamestr, "ResamplingReflectance");
 		sprintf(btstr, "All_Data/VIIRS-M%i-SDR_All/Reflectance", is);
+		sprintf(reorderstr, "All_Data/VIIRS-M%i-SDR_All/ReorderedReflectance", is);
 	} else {
 		// for M12 and above, resample Brightness Temperature
 		sprintf(attrnamestr, "ResamplingBrightnessTemperature");
 		sprintf(btstr, "All_Data/VIIRS-M%i-SDR_All/BrightnessTemperature", is);
+		sprintf(reorderstr, "All_Data/VIIRS-M%i-SDR_All/ReorderedBrightnessTemperature", is);
 	}
 	printf("Resampling atribute location = %s\n", attrfieldstr);
 	printf("Resampling atribute name = %s\n", attrnamestr);
@@ -524,6 +526,14 @@ run_band(char *h5file, char *geofile, bool sortoutput)
 	if(status > 0){
 		printf("WARNING! Data was already resampled\n");
 	}
+	
+	if(extra){
+		if(is != 13){
+			create_viirs(_simg, h5file, reorderstr);
+		}else{
+			create_viirs(_simgf, h5file, reorderstr);
+		}
+	}
 
 	free(img_in[0]);
 	free(img_in);
@@ -542,6 +552,8 @@ main(int argc, char** argv)
 	// makes "sorting" not be a permutation.
 	bool sortoutput = true;
 	
+	bool extra = false;	// save extra things in HDF5 file
+	
 	// parse arguments
 	GETARG(progname);
 	while(argc > 0 && strlen(argv[0]) == 2 && argv[0][0] == '-') {
@@ -554,6 +566,9 @@ main(int argc, char** argv)
 		case 'V':
 			printf("viirsresam version " VERSION "\n");
 			exit(0);
+		case 'x':
+			extra = true;
+			break;
 		case '-':
 			goto argdone;
 		}
@@ -581,6 +596,6 @@ argdone:
 	printf("viirsresam %s %s\n", geofile, h5file);
 	printf("Corresponding geofile = %s\n", geofile);
 
-	run_band(h5file, geofile, sortoutput);
+	run_band(h5file, geofile, sortoutput, extra);
 	exit(0);
 }

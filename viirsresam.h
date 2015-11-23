@@ -61,6 +61,9 @@ void ncfatal(int n, const char *fmt, ...);
 float ghrsst_readattr(int ncid, int varid, const char *name);
 int ghrsst_readvar(int ncid, const char *name, Mat &img);
 
+// create_viirs.cc
+void create_viirs(Mat data, const char *filename, const char *varname);
+
 // resample.cc
 void resample_viirs_mat(Mat &img, Mat &lat, Mat &lon, bool sortoutput);
 void resample_viirs(float **imgarr, float **latarr, float **lonarr, int nx, int ny, bool sortoutput);

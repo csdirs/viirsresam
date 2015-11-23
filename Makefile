@@ -7,6 +7,7 @@ OFILES=\
 	allocate_2d.o\
 	readwrite.o\
 	readwrite_ghrisst.o\
+	create_viirs.o\
 	resample.o\
 	utils.o\
 	main.o\
