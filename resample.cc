@@ -548,7 +548,7 @@ resample2d(const Mat &sortidx, const Mat &ssrc, const Mat &slat, const Mat &slon
 	for(int j = 0; j < width; j++){
 		//res[j] = geodist(lat1[j], lon1[j], lat2[j], lon2[j])/4.0;
 		double x = 2*j/(double)width - 1.0;
-		res[j] = 0.2*SQ(x) + 0.2;
+		res[j] = 0.1*SQ(x) + 0.1;
 	}
 	if(DEBUG)dumpmat("res.bin", _res);
 
