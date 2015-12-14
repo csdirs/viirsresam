@@ -59,7 +59,7 @@ int write_viirs_attribute(const char *filename, const char *attrFieldStr, const 
 // readwrite_ghrisst.cc
 void ncfatal(int n, const char *fmt, ...);
 float ghrsst_readattr(int ncid, int varid, const char *name);
-int ghrsst_readvar(int ncid, const char *name, Mat &img);
+int ghrsst_readwrite(int ncid, const char *name, Mat &img, bool dowrite);
 
 // create_viirs.cc
 void create_viirs(Mat data, const char *filename, const char *varname);

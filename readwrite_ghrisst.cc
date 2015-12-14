@@ -42,7 +42,7 @@ ghrsst_readattr(int ncid, int varid, const char *name)
 }
 
 int
-ghrsst_readvar(int ncid, const char *name, Mat &img)
+ghrsst_readwrite(int ncid, const char *name, Mat &img, bool dowrite)
 {
 	int i, varid, n, ndims, dimids[MAXDIMS], ishape[MAXDIMS], cvt;
 	size_t shape[MAXDIMS];
@@ -87,9 +87,16 @@ ghrsst_readvar(int ncid, const char *name, Mat &img)
 			ishape[i] = shape[i];
 	}
 	
-	img.create(ndims, ishape, cvt);
-	n = nc_get_var(ncid, varid, img.data);
-	if(n != NC_NOERR)
-		ncfatal(n, "readvar: nc_get_var failed");
+	if(dowrite){
+		CHECKMAT(img, cvt);
+		n = nc_put_var(ncid, varid, img.data);
+		if(n != NC_NOERR)
+			ncfatal(n, "nc_putvar_uchar failed");
+	}else{
+		img.create(ndims, ishape, cvt);
+		n = nc_get_var(ncid, varid, img.data);
+		if(n != NC_NOERR)
+			ncfatal(n, "nc_get_var failed");
+	}
 	return varid;
 }

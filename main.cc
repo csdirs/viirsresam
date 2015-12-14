@@ -8,6 +8,7 @@
 
 enum {
 	UNKNOWN,
+	ACSPO,
 	L2P_GHRSST,
 	GMODO,
 	GMTCO,
@@ -99,8 +100,8 @@ getfiletype(char *path)
 	if(strlen(p) > 20 && strncmp(&p[20], "L2P_GHRSST", strlen("L2P_GHRSST")) == 0){
 		return L2P_GHRSST;
 	}
-	if(strlen(p) > 20 && strncmp(&p[20], "L2P_GHRSST", strlen("L2P_GHRSST")) == 0){
-		return L2P_GHRSST;
+	if(strncmp(p, "ACSPO_", strlen("ACSPO_")) == 0){
+		return ACSPO;
 	}
 	if(strncmp(p, "GMODO_npp_", strlen("GMODO_npp_")) == 0){
 		return GMODO;
@@ -203,7 +204,7 @@ run_ghrsst(char *ncfile, bool sortoutput)
 	if(n != NC_NOERR)
 		ncfatal(n, "nc_open failed for %s", ncfile);
 	
-	int varid = ghrsst_readvar(ncid, "sea_surface_temperature", _sst);
+	int varid = ghrsst_readwrite(ncid, "sea_surface_temperature", _sst, false);
 	float offset = ghrsst_readattr(ncid, varid, "add_offset");
 	float scale = ghrsst_readattr(ncid, varid, "scale_factor");
 	printf("scale = %f, offset = %f\n", scale, offset);
@@ -216,9 +217,46 @@ run_ghrsst(char *ncfile, bool sortoutput)
 		sstf[i] = sst[i]*scale + offset;
 	}
 	
-	ghrsst_readvar(ncid, "lat", lat);
-	ghrsst_readvar(ncid, "lon", lon);
+	ghrsst_readwrite(ncid, "lat", lat, false);
+	ghrsst_readwrite(ncid, "lon", lon, false);
 	resample_viirs_mat(_sstf, lat, lon, sortoutput);
+}
+
+static void
+run_acspo(char *ncfile, bool sortoutput)
+{
+	int ncid, n;
+	Mat sst, lat, lon, acspo;
+	Mat sind;
+	
+	n = nc_open(ncfile, NC_WRITE, &ncid);
+	if(n != NC_NOERR)
+		ncfatal(n, "nc_open failed for %s", ncfile);
+	
+	ghrsst_readwrite(ncid, "sst_regression", sst, false);
+	ghrsst_readwrite(ncid, "latitude", lat, false);
+	ghrsst_readwrite(ncid, "longitude", lon, false);
+	ghrsst_readwrite(ncid, "acspo_mask", acspo, false);
+	
+	CHECKMAT(sst, CV_32FC1);
+	CHECKMAT(lat, CV_32FC1);
+	CHECKMAT(lon, CV_32FC1);
+	CHECKMAT(acspo, CV_8UC1);
+	
+	getadjustedsortingind(sind, lat);
+	Mat sst1 = resample_sort(sind, sst);
+	Mat lat1 = resample_sort(sind, lat);
+	Mat lon1 = resample_sort(sind, lon);
+	Mat acspo1 = resample_sort(sind, acspo);
+	
+	//dumpmat("sind.bin", sind);
+	//dumpmat("sst.bin", sst1);
+	
+	// write output
+	ghrsst_readwrite(ncid, "sst_regression", sst1, true);
+	ghrsst_readwrite(ncid, "latitude", lat1, true);
+	ghrsst_readwrite(ncid, "longitude", lon1, true);
+	ghrsst_readwrite(ncid, "acspo_mask", acspo1, true);
 }
 
 double
@@ -577,6 +615,11 @@ argdone:
 	if(false && argc == 1 && getfiletype(argv[0]) == L2P_GHRSST){
 		printf("resampling GHRSST file...\n");
 		run_ghrsst(argv[0], sortoutput);
+		exit(0);
+	}
+	if(argc == 1 && getfiletype(argv[0]) == ACSPO){
+		printf("resampling ACSPO file...\n");
+		run_acspo(argv[0], sortoutput);
 		exit(0);
 	}
 	if(false && argc == 1){
