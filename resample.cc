@@ -322,6 +322,9 @@ resample_sort(const Mat &sind, const Mat &img)
 	case CV_8UC1:
 		return resample_sort_<uchar>(sind, img);
 		break;
+	case CV_16SC1:
+		return resample_sort_<short>(sind, img);
+		break;
 	case CV_16UC1:
 		return resample_sort_<ushort>(sind, img);
 		break;
