@@ -228,29 +228,33 @@ static void
 reorder_ghrsst(char *ncfile, bool sortoutput)
 {
 	int ncid, n;
-	Mat sind, sst, lat, lon, acspo;
+	Mat sind, sst, m16, lat, lon, acspo;
 	
 	n = nc_open(ncfile, NC_WRITE, &ncid);
 	if(n != NC_NOERR)
 		ncfatal(n, "nc_open failed for %s", ncfile);
 	
 	ghrsst_readwrite(ncid, "sea_surface_temperature", sst, false);
+	ghrsst_readwrite(ncid, "brightness_temperature_12um", m16, false);
 	ghrsst_readwrite(ncid, "lat", lat, false);
 	ghrsst_readwrite(ncid, "lon", lon, false);
 	ghrsst_readwrite(ncid, "l2p_flags", acspo, false);
 
 	CHECKMAT(sst, CV_16SC1);
+	CHECKMAT(m16, CV_16SC1);
 	CHECKMAT(lat, CV_32FC1);
 	CHECKMAT(lon, CV_32FC1);
 	CHECKMAT(acspo, CV_16SC1);
 
 	getadjustedsortingind(sind, lat);
 	Mat sst1 = resample_sort(sind, sst);
+	Mat m161 = resample_sort(sind, m16);
 	Mat lat1 = resample_sort(sind, lat);
 	Mat lon1 = resample_sort(sind, lon);
 	Mat acspo1 = resample_sort(sind, acspo);
 	
 	ghrsst_readwrite(ncid, "sea_surface_temperature", sst1, true);
+	ghrsst_readwrite(ncid, "brightness_temperature_12um", m161, true);
 	ghrsst_readwrite(ncid, "lat", lat1, true);
 	ghrsst_readwrite(ncid, "lon", lon1, true);
 	ghrsst_readwrite(ncid, "l2p_flags", acspo1, true);
