@@ -532,8 +532,6 @@ run_band(char *h5file, char *geofile, bool sortoutput, bool extra)
 	for(int ix=0; ix<sx*sy; ix++) {
 		lon[0][ix] = bufferf3[ix];
 	}
-	free(bufferf2);
-	free(bufferf3);
 
 	Mat sind, _simg, _simgf;
 	ushort *simg;
@@ -619,6 +617,8 @@ run_band(char *h5file, char *geofile, bool sortoutput, bool extra)
 		}
 	}
 
+	free(bufferf2);
+	free(bufferf3);
 	free(img_in[0]);
 	free(img_in);
 	free(lat[0]);
